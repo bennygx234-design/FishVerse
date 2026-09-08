@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Market Mayhem — Business Tycoon</title>
+  <meta name="description" content="Market Mayhem: build a business empire from $1,000 to $1 billion. A browser-based business simulation game.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <!-- ================= START SCREEN ================= -->
+  <div id="startScreen">
+    <canvas class="bg-chart" id="bgChart"></canvas>
+    <div class="start-box">
+      <div class="title">MARKET<br>MAYHEM</div>
+      <div class="tag">Turn $1,000 and a corner store into a $1,000,000,000 empire.</div>
+      <div class="card glass">
+        <label for="companyInput">Company name</label>
+        <input id="companyInput" class="input" maxlength="24" placeholder="e.g. Pixel & Co." value="">
+        <label>Difficulty</label>
+        <div class="diff-row" id="diffRow"></div>
+        <div class="start-actions">
+          <button class="btn primary" id="btnNewGame">🚀 Start New Game</button>
+          <button class="btn gold hidden" id="btnContinue">▶ Continue</button>
+        </div>
+        <div class="start-foot">Buy low, sell high, hire smart, borrow bravely, crush your rivals. No installs, no accounts — everything runs in your browser.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= GAME ================= -->
+  <div id="app" class="hidden">
+    <header class="topbar">
+      <div class="brand"><span class="logo">📈</span>MARKET MAYHEM</div>
+      <div class="topsep"></div>
+      <div class="company-name" id="topCompany">Pixel &amp; Co.</div>
+      <div class="clock"><span class="day" id="topDay">Day 1</span><span class="date" id="topDate">Year 1 · Month 1</span></div>
+      <div class="speed" id="speedCtl">
+        <button data-speed="0" title="Pause (Space)">⏸</button>
+        <button data-speed="1" title="Normal speed (1)">1×</button>
+        <button data-speed="2" title="Double speed (2)">2×</button>
+        <button data-speed="4" title="Fast (3)">4×</button>
+        <button data-speed="8" title="Max (4)">8×</button>
+      </div>
+      <div class="goal">
+        <div class="goal-top"><span>🏆 Goal: $1B company value</span><span id="goalPct">0%</span></div>
+        <div class="goal-bar"><div class="fill" id="goalFill"></div></div>
+      </div>
+      <div class="topcash" id="topCash">$1,000</div>
+      <button class="iconbtn" id="btnAch" title="Achievements">🏅</button>
+      <button class="iconbtn" id="btnHelp" title="How to play">❔</button>
+      <button class="iconbtn" id="btnMute" title="Toggle sound">🔊</button>
+      <button class="iconbtn" id="btnMenu" title="Menu">☰</button>
+    </header>
+
+    <nav class="sidebar" id="sidebar">
+      <button class="navbtn active" data-view="dashboard"><span class="ico">📊</span><span class="nav-label">Dashboard</span></button>
+      <button class="navbtn" data-view="businesses"><span class="ico">🏬</span><span class="nav-label">Businesses</span></button>
+      <button class="navbtn" data-view="market"><span class="ico">📦</span><span class="nav-label">Market</span></button>
+      <button class="navbtn" data-view="bank"><span class="ico">🏦</span><span class="nav-label">Bank</span></button>
+      <button class="navbtn" data-view="hq"><span class="ico">🏢</span><span class="nav-label">HQ Upgrades</span></button>
+      <button class="navbtn" data-view="rivals"><span class="ico">⚔️</span><span class="nav-label">Rivals & Stocks</span></button>
+      <div class="side-foot">
+        <div>Market rank</div>
+        <div class="rank" id="sideRank">#7 of 7</div>
+        <div id="sideStreak" style="margin-top:6px"></div>
+      </div>
+    </nav>
+
+    <main class="main" id="view"></main>
+
+    <aside class="feed">
+      <h3>Activity Feed</h3>
+      <div class="feed-list" id="feedList"></div>
+      <div class="feed-quests">
+        <h4>📜 Quests</h4>
+        <div id="questList"></div>
+      </div>
+    </aside>
+
+    <div id="toasts"></div>
+    <canvas id="confetti"></canvas>
+  </div>
+
+  <div id="modal" class="hidden"></div>
+
+  <script src="js/data.js"></script>
+  <script src="js/engine.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
