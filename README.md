@@ -12,6 +12,26 @@ Market Mayhem is a browser-based business simulation game written in plain HTML,
 
 Progress autosaves to your browser's local storage every 5 days and whenever you leave the page. Come back later and hit **Continue** — your managers even keep the shops running for up to 20 days while you're away.
 
+## Deploy to Vercel
+
+The game is a static site, so Vercel needs no build step. `vercel.json` is already included.
+
+**From the dashboard (recommended)**
+
+1. Go to [vercel.com/new](https://vercel.com/new) and import the `FishVerse` repository.
+2. Leave **Framework Preset** as *Other* and the build command empty.
+3. Click **Deploy**. Vercel serves `index.html` from the repository root.
+
+Vercel deploys the repository's default branch to production. If the game lives on a feature branch, either merge it into the default branch first, or open the project's **Settings → Git → Production Branch** and set it to that branch. Every push after that redeploys automatically.
+
+**From the command line**
+
+```bash
+npm i -g vercel
+vercel login
+vercel --prod
+```
+
 ## How it works
 
 | System | What it does |
