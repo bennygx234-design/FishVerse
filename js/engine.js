@@ -931,11 +931,47 @@
     static clearSave() { try { root.localStorage && root.localStorage.removeItem(SAVE_KEY); } catch (e) { /* ignore */ } }
     load() {
       const s = Game.peekSave();
-      if (!s || s.version !== 1) return false;
-      this.S = s;
-      // migrate any missing fields defensively
-      for (const k in HQ_UPGRADES) if (this.S.hq[k] == null) this.S.hq[k] = 0;
-      return true;
+      if (!s || s.version !== 1 || !Array.isArray(s.businesses) || !s.market) return false;
+      try {
+        // Saves from older builds may lack rivals, products or fields added later: fill them in.
+        const byId = {}; for (const c of (s.competitors || [])) byId[c.id] = c;
+        s.competitors = COMPETITORS.map(def => byId[def.id] || { id: def.id, value: def.value * rnd(0.8, 1.25), history: [def.value], acquired: false, strength: 1, lastRank: 0 });
+        for (const c of s.competitors) { if (!Array.isArray(c.history)) c.history = [c.value]; if (typeof c.strength !== 'number') c.strength = 1; }
+        s.hq = s.hq || {}; for (const k in HQ_UPGRADES) if (s.hq[k] == null) s.hq[k] = 0;
+        for (const pid in PRODUCTS) if (!s.market[pid]) s.market[pid] = { cost: PRODUCTS[pid].cost, supply: 1, demand: 1, history: [PRODUCTS[pid].cost] };
+        s.businesses = s.businesses.filter(b => b && BUSINESS_TYPES[b.type]);
+        for (const b of s.businesses) {
+          b.upgrades = b.upgrades || {}; for (const uid in UPGRADES) if (b.upgrades[uid] == null) b.upgrades[uid] = 0;
+          b.stock = b.stock || {}; b.avgCost = b.avgCost || {}; b.prices = b.prices || {};
+          if (!b.last) b.last = { revenue: 0, cogs: 0, wages: 0, rent: 0, marketing: 0, profit: 0, sold: {}, expected: {}, lostStock: 0, lostStaff: 0, serviceRatio: 1, units: 0, spoiled: 0 };
+          b.last.sold = b.last.sold || {}; b.last.expected = b.last.expected || {};
+          for (const pid of BUSINESS_TYPES[b.type].products) {
+            if (b.stock[pid] == null) b.stock[pid] = 0;
+            if (b.avgCost[pid] == null) b.avgCost[pid] = s.market[pid].cost;
+            if (b.prices[pid] == null) b.prices[pid] = roundPrice(s.market[pid].cost * PRODUCTS[pid].markup);
+          }
+          if (!Array.isArray(b.history)) b.history = [];
+          if (typeof b.rep !== 'number') b.rep = 50;
+          if (typeof b.staff !== 'number') b.staff = BUSINESS_TYPES[b.type].staff;
+          if (typeof b.wageMult !== 'number') b.wageMult = 1;
+          if (typeof b.marketing !== 'number') b.marketing = 0;
+          if (typeof b.stockDays !== 'number') b.stockDays = 4;
+        }
+        const fresh = new Game(); fresh.newGame({ company: s.company, difficulty: s.difficulty in DIFFICULTY ? s.difficulty : 'normal' });
+        const F = fresh.S;
+        for (const k of ['stats', 'flags', 'lastDay', 'history', 'events']) { s[k] = s[k] || {}; for (const kk in F[k]) if (s[k][kk] == null) s[k][kk] = F[k][kk]; }
+        for (const k of ['quests', 'loans', 'subsidiaries', 'eventLog']) if (!Array.isArray(s[k])) s[k] = [];
+        for (const k of ['achievements', 'unlocked', 'portfolio']) if (!s[k] || typeof s[k] !== 'object') s[k] = {};
+        for (const k of ['sentiment', 'jitter', 'valuation', 'sharePrice', 'netAssets', 'goodwill', 'multiple', 'ema7', 'ema30', 'streak', 'overdraftDays', 'questCooldown', 'rank', 'nextBizId', 'nextLoanId', 'day', 'cash']) if (typeof s[k] !== 'number' || !isFinite(s[k])) s[k] = F[k];
+        if (!(s.difficulty in DIFFICULTY)) s.difficulty = 'normal';
+        if (s.events.pending && !EVENTS.find(e => e.id === s.events.pending.id)) s.events.pending = null;
+        s.events.active = (s.events.active || []).filter(ev => ev && EVENTS.find(e => e.id === ev.id));
+        this.S = s;
+        return true;
+      } catch (e) {
+        if (root.console) console.error('Save could not be migrated', e);
+        return false;
+      }
     }
     // Simulate time that passed while the tab was closed (capped, stops if cash goes negative)
     offlineProgress(maxDays = 20, secondsPerDay = 1) {

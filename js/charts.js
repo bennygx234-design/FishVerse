@@ -5,13 +5,13 @@
   'use strict';
 
   function prep(canvas, height) {
-    const dpr = root.devicePixelRatio || 1;
+    const dpr = Math.min(2, root.devicePixelRatio || 1);
     const w = canvas.clientWidth || canvas.width || 300;
     const h = height || canvas.clientHeight || canvas.height || 120;
     if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
       canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
     }
-    canvas.style.height = h + 'px';
+    if (canvas.style.height !== h + 'px') canvas.style.height = h + 'px';
     const ctx = canvas.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
@@ -104,11 +104,13 @@
       // line
       ctx.beginPath();
       for (let i = 0; i < n; i++) i ? ctx.lineTo(x(i), y(data[i])) : ctx.moveTo(x(i), y(data[i]));
-      ctx.strokeStyle = color; ctx.lineWidth = 2.2; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-      ctx.shadowColor = color; ctx.shadowBlur = 10; ctx.stroke(); ctx.shadowBlur = 0;
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      ctx.strokeStyle = color + '33'; ctx.lineWidth = 7; ctx.stroke();   // cheap glow (no shadowBlur)
+      ctx.strokeStyle = color; ctx.lineWidth = 2.2; ctx.stroke();
       // glowing end dot
       const ex = x(n - 1), ey = y(data[n - 1]);
-      ctx.beginPath(); ctx.arc(ex, ey, 4, 0, Math.PI * 2); ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 14; ctx.fill(); ctx.shadowBlur = 0;
+      ctx.beginPath(); ctx.arc(ex, ey, 9, 0, Math.PI * 2); ctx.fillStyle = color + '33'; ctx.fill();
+      ctx.beginPath(); ctx.arc(ex, ey, 4, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill();
       ctx.beginPath(); ctx.arc(ex, ey, 2, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill();
       // hover crosshair
       const hv = canvas._hover;

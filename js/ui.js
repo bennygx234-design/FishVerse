@@ -48,19 +48,23 @@
   // ============================================================================
   // Toasts, floaters, confetti, modal
   // ============================================================================
-  function toast({ icon = '💬', title = '', desc = '', kind = '', ttl = 5000 }) {
+  function toast({ icon = '💬', title = '', desc = '', kind = '', ttl = 4500 }) {
     const box = $('#toasts');
     const el = document.createElement('div');
     el.className = 'toast ' + kind;
     el.innerHTML = `<div class="ico">${icon}</div><div><div class="t">${esc(title)}</div>${desc ? `<div class="d">${esc(desc)}</div>` : ''}</div>`;
     box.appendChild(el);
-    while (box.children.length > 5) box.removeChild(box.firstChild);
+    const maxToasts = root.innerWidth <= 760 ? 2 : 4;
+    while (box.children.length > maxToasts) box.removeChild(box.firstChild);
     const kill = () => { el.classList.add('out'); setTimeout(() => el.remove(), 300); };
     el.addEventListener('click', kill);
     setTimeout(kill, ttl);
   }
   function floatAt(el, text, kind = 'good') {
     if (!el) return;
+    const now = performance.now();
+    if (el._lastFloat && now - el._lastFloat < 650) return; // avoid piles of overlapping floaters
+    el._lastFloat = now;
     const r = el.getBoundingClientRect();
     const f = document.createElement('div');
     f.className = 'floater ' + kind; f.textContent = text;
@@ -74,6 +78,7 @@
     parts: [], running: false,
     burst(n = 120, opts = {}) {
       const c = $('#confetti'); if (!c) return;
+      if (root.matchMedia && root.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
       const w = c.clientWidth, h = c.clientHeight;
       const cx = opts.x != null ? opts.x : w / 2, cy = opts.y != null ? opts.y : h * 0.3;
       const colors = ['#2dd4bf', '#fbbf24', '#f472b6', '#a78bfa', '#34d399', '#60a5fa', '#ffffff'];
@@ -87,7 +92,7 @@
     frame() {
       if (!this.running) return;
       const c = $('#confetti'); if (!c) return;
-      const dpr = root.devicePixelRatio || 1;
+      const dpr = Math.min(2, root.devicePixelRatio || 1);
       const w = c.clientWidth, h = c.clientHeight;
       if (c.width !== w * dpr) { c.width = w * dpr; c.height = h * dpr; }
       const ctx = c.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
@@ -187,6 +192,8 @@
       $('#btnAch').addEventListener('click', () => { Sound.play('click'); UI.showAchievements(); });
       $('#btnMute').addEventListener('click', () => { const m = Sound.toggle(); $('#btnMute').textContent = m ? '🔇' : '🔊'; if (!m) Sound.play('click'); });
       $('#btnMenu').addEventListener('click', () => { Sound.play('click'); UI.showMenu(); });
+      $('#btnFeed').addEventListener('click', () => { Sound.play('click'); document.body.classList.toggle('feed-open'); const d = $('#btnFeed .dot'); if (d) d.remove(); });
+      $('#btnFeedClose').addEventListener('click', () => document.body.classList.remove('feed-open'));
       // delegated actions inside the main view
       const view = $('#view');
       view.addEventListener('click', e => UI.onClick(e));
@@ -205,7 +212,7 @@
         case 'log': UI.addFeed(p); break;
         case 'day':
           if (S.day % 5 === 0) H.save();
-          if (H.getSpeed() <= 2 && p.summary.profit !== 0 && UI.view === 'dashboard') floatAt($('#stat-cash'), `${sign(p.summary.profit)}${fmt(p.summary.profit)}`, p.summary.profit >= 0 ? 'good' : 'bad');
+          if (H.getSpeed() === 1 && p.summary.profit !== 0 && UI.view === 'dashboard') floatAt($('#stat-cash'), `${sign(p.summary.profit)}${fmt(p.summary.profit)}`, p.summary.profit >= 0 ? 'good' : 'bad');
           break;
         case 'event': {
           const kind = p.def.kind === 'bad' ? 'bad' : p.def.kind === 'good' ? 'good' : '';
@@ -243,6 +250,9 @@
       el.innerHTML = `<div class="ico">${item.icon}</div><div><div>${esc(item.text)}</div><div class="day">Day ${G.S.day}</div></div>`;
       list.insertBefore(el, list.firstChild);
       while (list.children.length > 60) list.removeChild(list.lastChild);
+      // unread marker when the feed is collapsed into the drawer
+      const feed = $('.feed');
+      if (feed && !document.body.classList.contains('feed-open') && getComputedStyle(feed).display === 'none' && !$('#btnFeed .dot')) { const d = document.createElement('span'); d.className = 'dot'; $('#btnFeed').appendChild(d); }
     },
     rebuildFeed() {
       const list = $('#feedList'); list.innerHTML = '';
@@ -260,6 +270,7 @@
 
     showView(name) {
       UI.view = name; UI.navDots[name] = false; UI.updateNavDots();
+      if (root.innerWidth <= 760) document.body.classList.remove('feed-open');
       $$('.navbtn').forEach(b => b.classList.toggle('active', b.dataset.view === name));
       if (name !== 'businesses') UI.detailBiz = null;
       UI.render(true);
@@ -302,7 +313,7 @@
       }
       UI.mountedView = UI.view;
       UI.renderQuests();
-      UI.lastChart = 0;
+      UI.lastChart = 0; UI.sparkDay = -1;
     },
     refresh() {
       UI.refreshTop();
@@ -511,7 +522,6 @@
         </div>
         <div class="card section">
           <div class="row between"><h3>Products &amp; pricing</h3><div class="row"><span class="small muted">Buy for:</span><div class="btngroup">${[1, 3, 7].map(d => `<button class="btn xs ${UI.restockDays === d ? 'primary' : ''}" data-action="setRestockDays" data-days="${d}">${d} day${d > 1 ? 's' : ''}</button>`).join('')}</div><button class="btn sm" data-action="buyAllBiz" data-id="${b.id}">📦 Restock all products</button><button class="btn sm" data-action="pricesBiz" data-id="${b.id}">🏷️ Suggested prices</button></div></div>
-          <div class="prod-row head"><div>Product</div><div>Stock</div><div>Wholesale</div><div>Your price</div><div>Demand</div><div>Buy</div></div>
           ${T.products.map(pid => UI.htmlProductRow(b, pid)).join('')}
         </div>
         <div class="grid cols-2 section">
@@ -543,12 +553,12 @@
     htmlProductRow(b, pid) {
       const p = PRODUCTS[pid];
       return `<div class="prod-row" id="prow-${pid}">
-        <div><div class="pname"><span class="ico">${p.icon}</span><span>${p.name}${p.perishable ? ' <span class="badge" title="Loses 3% of stock per day">🧊</span>' : ''}</span></div><div class="small muted" data-f="sold"></div></div>
-        <div><b class="mono" data-f="stock"></b> <span class="small muted" data-f="cap"></span><div class="bar stockbar"><div class="fill" data-f="stockbar"></div></div><div class="small muted" data-f="days"></div></div>
-        <div><b class="mono" data-f="cost"></b><div class="small muted" data-f="trend"></div></div>
-        <div><div class="price-ctl"><button class="btn xs" data-action="priceStep" data-id="${b.id}" data-pid="${pid}" data-dir="-1">−</button><input class="input sm" type="number" step="any" min="0.01" value="${b.prices[pid]}" data-input="price" data-id="${b.id}" data-pid="${pid}"><button class="btn xs" data-action="priceStep" data-id="${b.id}" data-pid="${pid}" data-dir="1">+</button></div><div class="small" data-f="pricenote"></div></div>
-        <div><div data-f="demand"></div><div class="small muted" data-f="expect"></div></div>
-        <div class="btngroup"><button class="btn xs primary" data-action="buy" data-id="${b.id}" data-pid="${pid}" data-f="buybtn">Buy</button><button class="btn xs" data-action="buyMax" data-id="${b.id}" data-pid="${pid}">Max</button></div>
+        <div class="pcell"><div class="lbl">Product</div><div class="pname"><span class="ico">${p.icon}</span><span>${p.name}</span></div><div class="small muted" data-f="sold"></div>${p.perishable ? '<div class="small muted">🧊 perishable: loses 3%/day</div>' : ''}</div>
+        <div class="pcell"><div class="lbl">Stock</div><b class="mono" data-f="stock"></b> <span class="small muted" data-f="cap"></span><div class="bar stockbar"><div class="fill" data-f="stockbar"></div></div><div class="small muted" data-f="days"></div></div>
+        <div class="pcell"><div class="lbl">Wholesale</div><b class="mono" data-f="cost"></b><div class="small muted" data-f="trend"></div></div>
+        <div class="pcell"><div class="lbl">Your price</div><div class="price-ctl"><button class="btn xs" data-action="priceStep" data-id="${b.id}" data-pid="${pid}" data-dir="-1">−</button><input class="input sm" type="number" step="any" min="0.01" value="${b.prices[pid]}" data-input="price" data-id="${b.id}" data-pid="${pid}"><button class="btn xs" data-action="priceStep" data-id="${b.id}" data-pid="${pid}" data-dir="1">+</button></div><div class="small" data-f="pricenote"></div></div>
+        <div class="pcell"><div class="lbl">Demand</div><div data-f="demand"></div><div class="small muted" data-f="expect"></div></div>
+        <div class="pcell"><div class="lbl">Buy stock</div><div class="btngroup"><button class="btn xs primary" data-action="buy" data-id="${b.id}" data-pid="${pid}" data-f="buybtn">Buy</button><button class="btn xs" data-action="buyMax" data-id="${b.id}" data-pid="${pid}">Max</button></div></div>
       </div>`;
     },
     refreshBizDetail() {
@@ -580,7 +590,7 @@
         const inp = $('[data-input="price"]', row); if (document.activeElement !== inp && +inp.value !== b.prices[pid]) inp.value = b.prices[pid];
         const ratio = b.prices[pid] / G.fairPrice(pid);
         const margin = b.prices[pid] - b.avgCost[pid];
-        setHtml('[data-f="pricenote"]', `${priceBadge(ratio)} <span class="muted">suggested ${fmt(G.suggestedPrice(pid))} · margin <span class="${margin >= 0 ? 'good' : 'bad'}">${fmt(margin)}</span></span>`, row);
+        setHtml('[data-f="pricenote"]', `${priceBadge(ratio)}<div class="muted">suggested ${fmt(G.suggestedPrice(pid))} · margin <span class="${margin >= 0 ? 'good' : 'bad'}">${fmt(margin)}</span></div>`, row);
         setHtml('[data-f="demand"]', demandBadge(G.demandMult(b, pid, fx)), row);
         setText('[data-f="expect"]', `≈ ${exp < 10 ? exp.toFixed(1) : Math.round(exp)} / day at this price`, row);
         const qty = Math.max(1, Math.ceil(exp * UI.restockDays));

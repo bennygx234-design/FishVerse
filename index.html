@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0f1e">
   <title>Market Mayhem — Business Tycoon</title>
   <meta name="description" content="Market Mayhem: build a business empire from $1,000 to $1 billion. A browser-based business simulation game.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
@@ -32,7 +33,7 @@
   <!-- ================= GAME ================= -->
   <div id="app" class="hidden">
     <header class="topbar">
-      <div class="brand"><span class="logo">📈</span>MARKET MAYHEM</div>
+      <div class="brand"><span class="logo">📈</span><span class="text">MARKET MAYHEM</span></div>
       <div class="topsep"></div>
       <div class="company-name" id="topCompany">Pixel &amp; Co.</div>
       <div class="clock"><span class="day" id="topDay">Day 1</span><span class="date" id="topDate">Year 1 · Month 1</span></div>
@@ -48,10 +49,13 @@
         <div class="goal-bar"><div class="fill" id="goalFill"></div></div>
       </div>
       <div class="topcash" id="topCash">$1,000</div>
-      <button class="iconbtn" id="btnAch" title="Achievements">🏅</button>
-      <button class="iconbtn" id="btnHelp" title="How to play">❔</button>
-      <button class="iconbtn" id="btnMute" title="Toggle sound">🔊</button>
-      <button class="iconbtn" id="btnMenu" title="Menu">☰</button>
+      <div class="top-actions">
+        <button class="iconbtn" id="btnFeed" title="Activity &amp; quests">📰</button>
+        <button class="iconbtn" id="btnAch" title="Achievements">🏅</button>
+        <button class="iconbtn" id="btnHelp" title="How to play">❔</button>
+        <button class="iconbtn" id="btnMute" title="Toggle sound">🔊</button>
+        <button class="iconbtn" id="btnMenu" title="Menu">☰</button>
+      </div>
     </header>
 
     <nav class="sidebar" id="sidebar">
@@ -71,7 +75,7 @@
     <main class="main" id="view"></main>
 
     <aside class="feed">
-      <h3>Activity Feed</h3>
+      <h3><span>Activity Feed</span><button class="iconbtn feed-close" id="btnFeedClose" title="Close">✕</button></h3>
       <div class="feed-list" id="feedList"></div>
       <div class="feed-quests">
         <h4>📜 Quests</h4>

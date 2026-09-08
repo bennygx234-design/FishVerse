@@ -18,24 +18,40 @@
     speed = s; paused = false; acc = 0;
   }
   function pause(on) { paused = on; acc = 0; }
+  // Errors must never kill the animation loop: report them and keep going.
+  let lastErrAt = 0;
+  function reportError(err, fatal) {
+    if (window.console) console.error(err);
+    const now = Date.now();
+    if (now - lastErrAt < 8000) return;
+    lastErrAt = now;
+    try {
+      UI.toast({ icon: '⚠️', title: fatal ? 'Simulation paused after an error' : 'A display glitch was skipped', desc: String((err && err.message) || err).slice(0, 140), kind: 'bad', ttl: 9000 });
+    } catch (e) { /* ignore */ }
+  }
   function loop(now) {
-    if (running) {
-      const S = game.S;
-      if (S && !paused && speed > 0 && !S.flags.bankrupt) {
-        acc += Math.min(250, now - last);
-        const interval = MS_PER_DAY / speed;
-        let guard = 0;
-        while (acc >= interval && guard++ < 16) {
-          acc -= interval;
-          game.tick();
-          if (S.events.pending || S.flags.bankrupt || (S.flags.won && !S.flags.continued)) { acc = 0; break; }
+    try {
+      if (running) {
+        const S = game.S;
+        if (S && !paused && speed > 0 && !S.flags.bankrupt) {
+          acc += Math.min(250, now - last);
+          const interval = MS_PER_DAY / speed;
+          let guard = 0;
+          while (acc >= interval && guard++ < 16) {
+            acc -= interval;
+            try { game.tick(); }
+            catch (err) { setSpeed(0); UI.updateSpeedButtons(); reportError(err, true); break; }
+            if (S.events.pending || S.flags.bankrupt || (S.flags.won && !S.flags.continued)) { acc = 0; break; }
+          }
         }
+        UI.frame(now);
       }
-      UI.frame(now);
-    }
+    } catch (err) { reportError(err, false); }
     last = now;
     requestAnimationFrame(loop);
   }
+  window.addEventListener('error', e => reportError(e.error || e.message, false));
+  window.addEventListener('unhandledrejection', e => reportError(e.reason, false));
 
   const hooks = {
     setSpeed, getSpeed: () => (paused ? 0 : speed), pause, isPaused: () => paused,
