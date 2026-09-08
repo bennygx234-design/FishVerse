@@ -22,6 +22,10 @@
   let lastErrAt = 0;
   function reportError(err, fatal) {
     if (window.console) console.error(err);
+    try {
+      const st = window.MM.stats; const msg = String((err && (err.stack || err.message)) || err).slice(0, 400);
+      if (st) { st.errors.unshift({ t: new Date().toISOString(), msg, fatal: !!fatal }); if (st.errors.length > 20) st.errors.length = 20; localStorage.setItem('mm_errors', JSON.stringify(st.errors)); }
+    } catch (e) { /* ignore */ }
     const now = Date.now();
     if (now - lastErrAt < 8000) return;
     lastErrAt = now;
@@ -29,7 +33,13 @@
       UI.toast({ icon: '⚠️', title: fatal ? 'Simulation paused after an error' : 'A display glitch was skipped', desc: String((err && err.message) || err).slice(0, 140), kind: 'bad', ttl: 9000 });
     } catch (e) { /* ignore */ }
   }
+  let lastLoopAt = performance.now(), loopId = 0, fpsFrames = 0, fpsAt = performance.now();
+  const stats = window.MM.stats = { fps: 0, tickMs: 0, frameMs: 0, errors: [] };
+  function scheduleLoop() { const id = ++loopId; requestAnimationFrame(now => { if (id === loopId) loop(now); }); }
   function loop(now) {
+    lastLoopAt = now;
+    fpsFrames++; if (now - fpsAt >= 1000) { stats.fps = fpsFrames; fpsFrames = 0; fpsAt = now; }
+    const t0 = performance.now();
     try {
       if (running) {
         const S = game.S;
@@ -39,7 +49,7 @@
           let guard = 0;
           while (acc >= interval && guard++ < 16) {
             acc -= interval;
-            try { game.tick(); }
+            try { const tt = performance.now(); game.tick(); stats.tickMs = performance.now() - tt; }
             catch (err) { setSpeed(0); UI.updateSpeedButtons(); reportError(err, true); break; }
             if (S.events.pending || S.flags.bankrupt || (S.flags.won && !S.flags.continued)) { acc = 0; break; }
           }
@@ -47,9 +57,23 @@
         UI.frame(now);
       }
     } catch (err) { reportError(err, false); }
+    stats.frameMs = performance.now() - t0;
     last = now;
-    requestAnimationFrame(loop);
+    scheduleLoop();
   }
+  // Watchdog: restart a dead frame loop and never let a pending decision stall the game silently.
+  setInterval(() => {
+    try {
+      if (!running || document.hidden || !game.S) return;
+      const S = game.S;
+      if (performance.now() - lastLoopAt > 3000) { last = performance.now(); acc = 0; scheduleLoop(); reportError(new Error('Frame loop stalled and was restarted'), false); }
+      if (S.events.pending && !UI.Modal.isOpen()) {
+        const def = D.EVENTS.find(e => e.id === S.events.pending.id);
+        if (def) UI.showChoice({ def, param: S.events.pending.param, desc: S.events.pending.desc });
+        else game.resolveChoice(1);
+      }
+    } catch (e) { reportError(e, false); }
+  }, 1000);
   window.addEventListener('error', e => reportError(e.error || e.message, false));
   window.addEventListener('unhandledrejection', e => reportError(e.reason, false));
 
@@ -140,5 +164,6 @@
   $('#btnContinue').addEventListener('click', () => { UI.Sound.play('click'); startGame(true); });
   $('#companyInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('#btnNewGame').click(); });
   showStart();
-  requestAnimationFrame(loop);
+  if (/[?&]debug=1/.test(location.search)) UI.setDebug(true);
+  scheduleLoop();
 })();

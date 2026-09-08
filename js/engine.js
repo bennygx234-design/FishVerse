@@ -525,7 +525,10 @@
     tick() {
       const S = this.S;
       if (S.flags.bankrupt) return;
-      if (S.events.pending) return; // waiting for the player's decision
+      if (S.events.pending) { // waiting for the player's decision
+        if (EVENTS.find(e => e.id === S.events.pending.id)) return;
+        S.events.pending = null; // unknown event from an older build: drop it
+      }
       S.day++;
       const fx = this._fx = this.activeEffects();
       const day = { revenue: 0, cogs: 0, wages: 0, rent: 0, marketing: 0, interest: 0, other: 0, profit: 0, units: 0, subsidiaries: 0, spoilage: 0, fees: 0 };
@@ -938,7 +941,13 @@
         s.competitors = COMPETITORS.map(def => byId[def.id] || { id: def.id, value: def.value * rnd(0.8, 1.25), history: [def.value], acquired: false, strength: 1, lastRank: 0 });
         for (const c of s.competitors) { if (!Array.isArray(c.history)) c.history = [c.value]; if (typeof c.strength !== 'number') c.strength = 1; }
         s.hq = s.hq || {}; for (const k in HQ_UPGRADES) if (s.hq[k] == null) s.hq[k] = 0;
-        for (const pid in PRODUCTS) if (!s.market[pid]) s.market[pid] = { cost: PRODUCTS[pid].cost, supply: 1, demand: 1, history: [PRODUCTS[pid].cost] };
+        for (const pid in PRODUCTS) {
+          if (!s.market[pid]) s.market[pid] = { cost: PRODUCTS[pid].cost, supply: 1, demand: 1, history: [PRODUCTS[pid].cost] };
+          const m = s.market[pid];
+          if (!Number.isFinite(m.cost) || m.cost <= 0) m.cost = PRODUCTS[pid].cost;
+          if (!Number.isFinite(m.supply)) m.supply = 1; if (!Number.isFinite(m.demand)) m.demand = 1;
+          if (!Array.isArray(m.history)) m.history = [m.cost];
+        }
         s.businesses = s.businesses.filter(b => b && BUSINESS_TYPES[b.type]);
         for (const b of s.businesses) {
           b.upgrades = b.upgrades || {}; for (const uid in UPGRADES) if (b.upgrades[uid] == null) b.upgrades[uid] = 0;
@@ -946,16 +955,17 @@
           if (!b.last) b.last = { revenue: 0, cogs: 0, wages: 0, rent: 0, marketing: 0, profit: 0, sold: {}, expected: {}, lostStock: 0, lostStaff: 0, serviceRatio: 1, units: 0, spoiled: 0 };
           b.last.sold = b.last.sold || {}; b.last.expected = b.last.expected || {};
           for (const pid of BUSINESS_TYPES[b.type].products) {
-            if (b.stock[pid] == null) b.stock[pid] = 0;
-            if (b.avgCost[pid] == null) b.avgCost[pid] = s.market[pid].cost;
-            if (b.prices[pid] == null) b.prices[pid] = roundPrice(s.market[pid].cost * PRODUCTS[pid].markup);
+            if (!Number.isFinite(b.stock[pid]) || b.stock[pid] < 0) b.stock[pid] = 0;
+            if (!Number.isFinite(b.avgCost[pid])) b.avgCost[pid] = s.market[pid].cost;
+            if (!Number.isFinite(b.prices[pid]) || b.prices[pid] <= 0) b.prices[pid] = roundPrice(s.market[pid].cost * PRODUCTS[pid].markup);
           }
           if (!Array.isArray(b.history)) b.history = [];
-          if (typeof b.rep !== 'number') b.rep = 50;
-          if (typeof b.staff !== 'number') b.staff = BUSINESS_TYPES[b.type].staff;
-          if (typeof b.wageMult !== 'number') b.wageMult = 1;
-          if (typeof b.marketing !== 'number') b.marketing = 0;
-          if (typeof b.stockDays !== 'number') b.stockDays = 4;
+          if (!Number.isFinite(b.rep)) b.rep = 50;
+          if (!Number.isFinite(b.staff) || b.staff < 0) b.staff = BUSINESS_TYPES[b.type].staff;
+          if (!Number.isFinite(b.wageMult)) b.wageMult = 1;
+          if (!Number.isFinite(b.marketing) || b.marketing < 0) b.marketing = 0;
+          if (!Number.isFinite(b.stockDays)) b.stockDays = 4;
+          if (!Number.isFinite(b.paid)) b.paid = 0; if (!Number.isFinite(b.upgradesPaid)) b.upgradesPaid = 0;
         }
         const fresh = new Game(); fresh.newGame({ company: s.company, difficulty: s.difficulty in DIFFICULTY ? s.difficulty : 'normal' });
         const F = fresh.S;
@@ -995,6 +1005,7 @@
 
     // ---------- formatting -------------------------------------------------------------------
     fmt(n, opts = {}) {
+      if (typeof n !== 'number' || !isFinite(n)) return '$—';
       const neg = n < 0; n = Math.abs(n);
       let s;
       if (n >= 1e12) s = (n / 1e12).toFixed(2) + 'T';

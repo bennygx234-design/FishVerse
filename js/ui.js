@@ -282,6 +282,7 @@
     frame(now) {
       Confetti.frame();
       if (!G.S) return;
+      if (UI.debug && now - (UI.lastDiag || 0) > 500) { UI.lastDiag = now; UI.renderDiag(); }
       const inputFocused = document.activeElement && $('#view').contains(document.activeElement) && /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName);
       if (now - UI.lastRefresh > 200) { UI.render(false, inputFocused); UI.lastRefresh = now; }
       if ((G.S.day !== UI.chartDay || UI.lastChart === 0) && now - UI.lastChart > 120) { UI.drawCharts(); UI.lastChart = now; UI.chartDay = G.S.day; }
@@ -816,6 +817,8 @@
     // MODALS
     // ============================================================================
     showChoice(p) {
+      if (!p || !p.def || !p.def.choices) { if (G.S.events.pending) G.resolveChoice(1); return; }
+      H.pause(true);
       const m = Modal.open({ title: p.def.title, icon: p.def.icon, cls: 'event-choice', body: `<p>${esc(p.desc)}</p><p class="small muted">The game is paused while you decide.</p>`,
         actions: p.def.choices.map((c, i) => ({ label: G._fill(c.label, p.param), cls: i === 0 ? 'primary' : '', fn: () => { G.resolveChoice(i); UI.render(true); } })),
         onClose: () => { if (G.S.events.pending) G.resolveChoice(p.def.choices.length - 1); H.pause(false); } });
@@ -845,6 +848,7 @@
       Modal.open({ title: 'Menu', icon: '☰', body: `<p class="muted small">Progress autosaves every 5 days and whenever you leave the page.</p>`, actions: [
         { label: '▶ Resume', cls: 'primary', fn: () => { if (!wasPaused) H.pause(false); } },
         { label: '💾 Save now', fn: () => { H.save(); toast({ icon: '💾', title: 'Game saved', ttl: 2000 }); if (!wasPaused) H.pause(false); } },
+        { label: UI.debug ? '🩺 Hide diagnostics' : '🩺 Diagnostics', fn: () => { UI.setDebug(!UI.debug); if (!wasPaused) H.pause(false); } },
         { label: '📖 How to play', fn: () => { UI.showHelp(); $('#modal')._onClose = () => { if (!wasPaused) H.pause(false); }; return true; } },
         { label: '🔁 New game', cls: 'danger', fn: () => { Modal.open({ title: 'Start over?', icon: '⚠️', body: '<p>Your current company will be deleted. This cannot be undone.</p>', actions: [{ label: 'Cancel', fn: () => { if (!wasPaused) H.pause(false); } }, { label: 'Delete & restart', cls: 'danger', fn: () => H.newGame() }] }); return true; } },
       ], onClose: () => { if (!wasPaused && !Modal.isOpen()) H.pause(false); } });
@@ -870,6 +874,21 @@
     },
     showOffline(r) {
       Modal.open({ title: 'While you were away', icon: '⏰', body: `<p>Your managers ran the empire for <b>${r.days} days</b>.</p><div class="stat-grid"><div class="kv"><span>Cash</span><span class="v ${r.cashDelta >= 0 ? 'good' : 'bad'}">${sign(r.cashDelta)}${fmt(r.cashDelta)}</span></div><div class="kv"><span>Company value</span><span class="v ${r.valueDelta >= 0 ? 'good' : 'bad'}">${sign(r.valueDelta)}${fmt(r.valueDelta)}</span></div></div>`, actions: [{ label: 'Back to work', cls: 'primary' }] });
+    },
+    setDebug(on) {
+      UI.debug = !!on;
+      let d = $('#diag');
+      if (!on) { if (d) d.remove(); return; }
+      if (!d) { d = document.createElement('div'); d.id = 'diag'; document.body.appendChild(d); }
+      UI.renderDiag();
+    },
+    renderDiag() {
+      const d = $('#diag'); if (!d) return;
+      const st = (root.MM && root.MM.stats) || {};
+      const S = G.S;
+      const mem = performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1048576) + ' MB' : 'n/a';
+      const err = st.errors && st.errors[0] ? st.errors[0].msg.split('\n')[0] : 'none';
+      d.innerHTML = `<b>DIAGNOSTICS</b> fps ${st.fps || 0} · frame ${(st.frameMs || 0).toFixed(1)}ms · tick ${(st.tickMs || 0).toFixed(2)}ms · day ${S ? S.day : '-'} · speed ${H.getSpeed()}x · pending ${S && S.events.pending ? 'YES' : 'no'} · modal ${Modal.isOpen() ? 'open' : 'closed'} · biz ${S ? S.businesses.length : 0} · heap ${mem}<br>${esc(navigator.userAgent.slice(0, 90))}<br>last error: ${esc(err)}`;
     },
     toast, Modal, Sound, Confetti, floatAt,
   };
