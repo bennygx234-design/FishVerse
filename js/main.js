@@ -156,7 +156,7 @@
 
   // ---------- persistence hooks --------------------------------------------------------
   window.addEventListener('beforeunload', () => { if (running && game.S) game.save(!paused); });
-  document.addEventListener('visibilitychange', () => { if (document.hidden && running && game.S) game.save(!paused); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden && running && game.S) game.save(!paused); else { lastLoopAt = performance.now(); last = performance.now(); acc = 0; } });
 
   // ---------- boot ------------------------------------------------------------------
   UI.init(game, hooks);

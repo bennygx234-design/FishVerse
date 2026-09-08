@@ -79,6 +79,7 @@
     burst(n = 120, opts = {}) {
       const c = $('#confetti'); if (!c) return;
       if (root.matchMedia && root.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      c.hidden = false;
       const w = c.clientWidth, h = c.clientHeight;
       const cx = opts.x != null ? opts.x : w / 2, cy = opts.y != null ? opts.y : h * 0.3;
       const colors = ['#2dd4bf', '#fbbf24', '#f472b6', '#a78bfa', '#34d399', '#60a5fa', '#ffffff'];
@@ -92,9 +93,10 @@
     frame() {
       if (!this.running) return;
       const c = $('#confetti'); if (!c) return;
-      const dpr = Math.min(2, root.devicePixelRatio || 1);
-      const w = c.clientWidth, h = c.clientHeight;
-      if (c.width !== w * dpr) { c.width = w * dpr; c.height = h * dpr; }
+      const dpr = 1; // particles do not need a retina buffer; keeps GPU memory low
+      const w = root.innerWidth, h = root.innerHeight;
+      const W = Math.max(1, Math.round(w * dpr)), Hh = Math.max(1, Math.round(h * dpr));
+      if (c.width !== W || c.height !== Hh) { c.width = W; c.height = Hh; }
       const ctx = c.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
       this.parts = this.parts.filter(p => p.life > 0 && p.y < h + 20);
       for (const p of this.parts) {
@@ -104,7 +106,7 @@
         ctx.globalAlpha = Math.min(1, p.life / 30); ctx.fillStyle = p.color; ctx.fillRect(-p.s / 2, -p.s / 2, p.s, p.s * 0.6);
       }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.globalAlpha = 1;
-      if (!this.parts.length) { this.running = false; ctx.clearRect(0, 0, w, h); }
+      if (!this.parts.length) { this.running = false; ctx.clearRect(0, 0, w, h); c.width = 1; c.height = 1; c.hidden = true; } // release the buffer while idle
     },
   };
 

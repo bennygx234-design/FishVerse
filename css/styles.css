@@ -344,7 +344,8 @@ input[type=range]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 
 #diag { position: fixed; left: 8px; bottom: 8px; z-index: 300; background: rgba(0,0,0,0.85); color: #9ff0e0; font: 11px/1.45 var(--mono); padding: 6px 10px; border-radius: 8px; max-width: 92vw; pointer-events: none; border: 1px solid rgba(45,212,191,0.4); }
 
 /* ---------- confetti canvas ---------- */
-#confetti { position: fixed; inset: 0; pointer-events: none; z-index: 150; }
+#confetti { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 150; }
+#confetti[hidden] { display: none; }
 .shake { animation: shake .5s; }
 
 /* ==========================================================================
