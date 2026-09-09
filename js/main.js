@@ -93,7 +93,7 @@
     UI.Modal.close();
     const save = Game.peekSave();
     const cont = $('#btnContinue');
-    if (save && save.version === 1 && !save.flags.bankrupt) { cont.classList.remove('hidden'); cont.textContent = `▶ Continue ${save.company} (Day ${save.day})`; }
+    if (save && save.version === 1 && !save.flags.bankrupt) { cont.classList.remove('hidden'); cont.innerHTML = `${window.MM_ICONS('refresh', 17)}<span>Continue · ${save.company}</span>`; cont.title = `Day ${save.day}`; }
     else cont.classList.add('hidden');
     if (!$('#companyInput').value) $('#companyInput').value = randomName();
     renderDiff();
@@ -103,6 +103,7 @@
   }
   function renderDiff() {
     $('#diffRow').innerHTML = Object.keys(D.DIFFICULTY).map(k => `<button class="diff-btn ${difficulty === k ? 'active' : ''}" data-diff="${k}"><b>${D.DIFFICULTY[k].name}</b><span>${D.DIFFICULTY[k].desc}</span></button>`).join('');
+    UI.hydrateIcons($('#diffRow'));
     document.querySelectorAll('.diff-btn').forEach(b => b.addEventListener('click', () => { difficulty = b.dataset.diff; renderDiff(); UI.Sound.play('click'); }));
   }
   function randomName() {
@@ -130,10 +131,10 @@
       const r = game.offlineProgress(20, MS_PER_DAY / 1000);
       UI.render(true);
       if (r && r.days > 0) { UI.showOffline(r); }
-      UI.toast({ icon: '👋', title: `Welcome back, ${game.S.company}`, desc: `Day ${game.S.day}. The markets missed you.`, ttl: 4000 });
+      UI.toast({ icon: '🎉', title: `Welcome back, ${game.S.company}`, desc: `Day ${game.S.day}. The markets missed you.`, ttl: 4000 });
       if (game.S.events.pending) { const def = D.EVENTS.find(e => e.id === game.S.events.pending.id); UI.showChoice({ def, param: game.S.events.pending.param, desc: game.S.events.pending.desc }); }
     } else {
-      UI.toast({ icon: '🏪', title: `Welcome, ${game.S.company}!`, desc: 'Your corner store is open. Keep shelves full, hire smart, and grow.', kind: 'good', ttl: 7000 });
+      UI.toast({ icon: '🏪', title: `Welcome, ${game.S.company}`, desc: 'Your corner store is open. Keep shelves full, hire smart, and grow.', kind: 'good', ttl: 7000 });
       setTimeout(() => UI.toast({ icon: '💡', title: 'First steps', desc: 'Open Businesses → Corner Store to restock, then visit the Bank for growth capital.', ttl: 9000 }), 2500);
     }
     game.save(true);

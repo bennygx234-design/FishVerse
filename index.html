@@ -3,29 +3,30 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="theme-color" content="#0a0f1e">
+  <meta name="theme-color" content="#070b16">
   <title>Market Mayhem — Business Tycoon</title>
   <meta name="description" content="Market Mayhem: build a business empire from $1,000 to $1 billion. A browser-based business simulation game.">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
-  <link rel="stylesheet" href="css/styles.css?v=5">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='26' fill='%232f7cf6'/><path d='M22 66l18-18 14 12 24-26' stroke='white' stroke-width='9' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+  <link rel="stylesheet" href="css/styles.css?v=8">
 </head>
 <body>
   <!-- ================= START SCREEN ================= -->
   <div id="startScreen">
     <canvas class="bg-chart" id="bgChart"></canvas>
     <div class="start-box">
-      <div class="title">MARKET<br>MAYHEM</div>
-      <div class="tag">Turn $1,000 and a corner store into a $1,000,000,000 empire.</div>
+      <div class="start-mark" data-icon="chart-line" data-size="38"></div>
+      <div class="title">Market<br>Mayhem</div>
+      <div class="tag">Turn $1,000 and a corner store into a billion-dollar empire.</div>
       <div class="card glass">
         <label for="companyInput">Company name</label>
-        <input id="companyInput" class="input" maxlength="24" placeholder="e.g. Pixel & Co." value="">
+        <input id="companyInput" class="input" maxlength="24" placeholder="e.g. Pixel &amp; Co." value="">
         <label>Difficulty</label>
         <div class="diff-row" id="diffRow"></div>
         <div class="start-actions">
-          <button class="btn primary" id="btnNewGame">🚀 Start New Game</button>
-          <button class="btn gold hidden" id="btnContinue">▶ Continue</button>
+          <button class="btn primary" id="btnNewGame"><span data-icon="play" data-size="17"></span> Start new game</button>
+          <button class="btn gold hidden" id="btnContinue"><span data-icon="refresh" data-size="17"></span> Continue</button>
         </div>
-        <div class="start-foot">Buy low, sell high, hire smart, borrow bravely, crush your rivals. No installs, no accounts — everything runs in your browser.</div>
+        <div class="start-foot">Buy low, sell high, hire smart, borrow bravely, outgrow your rivals. Everything runs in your browser — no installs, no accounts.</div>
       </div>
     </div>
   </div>
@@ -33,52 +34,52 @@
   <!-- ================= GAME ================= -->
   <div id="app" class="hidden">
     <header class="topbar">
-      <div class="brand"><span class="logo">📈</span><span class="text">MARKET MAYHEM</span></div>
+      <div class="brand"><span class="logo" data-icon="chart-line" data-size="19"></span><span class="text">Market Mayhem</span></div>
       <div class="topsep"></div>
       <div class="company-name" id="topCompany">Pixel &amp; Co.</div>
       <div class="clock"><span class="day" id="topDay">Day 1</span><span class="date" id="topDate">Year 1 · Month 1</span></div>
       <div class="speed" id="speedCtl">
-        <button data-speed="0" title="Pause (Space)">⏸</button>
+        <button data-speed="0" title="Pause (Space)" data-icon="pause" data-size="15"></button>
         <button data-speed="1" title="Normal speed (1)">1×</button>
         <button data-speed="2" title="Double speed (2)">2×</button>
         <button data-speed="4" title="Fast (3)">4×</button>
         <button data-speed="8" title="Max (4)">8×</button>
       </div>
       <div class="goal">
-        <div class="goal-top"><span>🏆 Goal: $1B company value</span><span id="goalPct">0%</span></div>
+        <div class="goal-top"><span><b>Goal</b> · $1B company value</span><span id="goalPct">0%</span></div>
         <div class="goal-bar"><div class="fill" id="goalFill"></div></div>
       </div>
-      <div class="topcash" id="topCash">$1,000</div>
+      <div class="topcash" id="topCash"><span data-icon="wallet" data-size="17"></span><span id="topCashValue">$1,000</span></div>
       <div class="top-actions">
-        <button class="iconbtn" id="btnFeed" title="Activity &amp; quests">📰</button>
-        <button class="iconbtn" id="btnAch" title="Achievements">🏅</button>
-        <button class="iconbtn" id="btnHelp" title="How to play">❔</button>
-        <button class="iconbtn" id="btnMute" title="Toggle sound">🔊</button>
-        <button class="iconbtn" id="btnMenu" title="Menu">☰</button>
+        <button class="iconbtn" id="btnFeed" title="Activity &amp; quests" data-icon="feed"></button>
+        <button class="iconbtn" id="btnAch" title="Achievements" data-icon="medal"></button>
+        <button class="iconbtn" id="btnHelp" title="How to play" data-icon="help"></button>
+        <button class="iconbtn" id="btnMute" title="Toggle sound" data-icon="sound-on"></button>
+        <button class="iconbtn" id="btnMenu" title="Menu" data-icon="menu"></button>
       </div>
     </header>
 
     <nav class="sidebar" id="sidebar">
-      <button class="navbtn active" data-view="dashboard"><span class="ico">📊</span><span class="nav-label">Dashboard</span></button>
-      <button class="navbtn" data-view="businesses"><span class="ico">🏬</span><span class="nav-label">Businesses</span></button>
-      <button class="navbtn" data-view="market"><span class="ico">📦</span><span class="nav-label">Market</span></button>
-      <button class="navbtn" data-view="bank"><span class="ico">🏦</span><span class="nav-label">Bank</span></button>
-      <button class="navbtn" data-view="hq"><span class="ico">🏢</span><span class="nav-label">HQ Upgrades</span></button>
-      <button class="navbtn" data-view="rivals"><span class="ico">⚔️</span><span class="nav-label">Rivals & Stocks</span></button>
+      <button class="navbtn active" data-view="dashboard"><span class="ico" data-icon="dashboard"></span><span class="nav-label">Dashboard</span></button>
+      <button class="navbtn" data-view="businesses"><span class="ico" data-icon="store"></span><span class="nav-label">Businesses</span></button>
+      <button class="navbtn" data-view="market"><span class="ico" data-icon="market"></span><span class="nav-label">Market</span></button>
+      <button class="navbtn" data-view="bank"><span class="ico" data-icon="bank"></span><span class="nav-label">Bank</span></button>
+      <button class="navbtn" data-view="hq"><span class="ico" data-icon="hq"></span><span class="nav-label">Headquarters</span></button>
+      <button class="navbtn" data-view="rivals"><span class="ico" data-icon="rivals"></span><span class="nav-label">Rivals</span></button>
       <div class="side-foot">
-        <div>Market rank</div>
-        <div class="rank" id="sideRank">#7 of 7</div>
-        <div id="sideStreak" style="margin-top:6px"></div>
+        <div class="cap">Market rank</div>
+        <div class="rank" id="sideRank">#7</div>
+        <div id="sideStreak"></div>
       </div>
     </nav>
 
     <main class="main" id="view"></main>
 
     <aside class="feed">
-      <h3><span>Activity Feed</span><button class="iconbtn feed-close" id="btnFeedClose" title="Close">✕</button></h3>
+      <h3><span>Activity</span><button class="iconbtn feed-close" id="btnFeedClose" title="Close" data-icon="close" data-size="16"></button></h3>
       <div class="feed-list" id="feedList"></div>
       <div class="feed-quests">
-        <h4>📜 Quests</h4>
+        <h4><span data-icon="scroll" data-size="14"></span> Quests</h4>
         <div id="questList"></div>
       </div>
     </aside>
@@ -89,10 +90,11 @@
 
   <div id="modal" class="hidden"></div>
 
-  <script src="js/data.js?v=5"></script>
-  <script src="js/engine.js?v=5"></script>
-  <script src="js/charts.js?v=5"></script>
-  <script src="js/ui.js?v=5"></script>
-  <script src="js/main.js?v=5"></script>
+  <script src="js/data.js?v=8"></script>
+  <script src="js/icons.js?v=8"></script>
+  <script src="js/engine.js?v=8"></script>
+  <script src="js/charts.js?v=8"></script>
+  <script src="js/ui.js?v=8"></script>
+  <script src="js/main.js?v=8"></script>
 </body>
 </html>

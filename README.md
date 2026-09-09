@@ -59,13 +59,34 @@ vercel --prod
 
 ```
 index.html        page shell
-css/styles.css    design system, layout, animations
+css/styles.css    liquid-glass design system, layout, animations, embedded fonts
+fonts/            Outfit + Plus Jakarta Sans (also inlined into the stylesheet)
 js/data.js        products, business types, upgrades, events, rivals, quests, achievements
 js/engine.js      simulation engine (runs headlessly in Node too)
+js/icons.js       inline SVG icon set
 js/charts.js      dependency-free canvas charts
 js/ui.js          views, bindings, toasts, modals, sound, confetti
 js/main.js        game loop, start screen, keyboard, persistence
 ```
+
+## Look and feel
+
+A dark "liquid glass" interface: translucent layered panels, soft inner highlights and
+deep shadows over a slow colour-washed background. Type is **Outfit** for display text
+and numerals and **Plus Jakarta Sans** for interface text, both embedded in the
+stylesheet so nothing is fetched at runtime. Interface icons are inline SVG from
+[Lucide](https://lucide.dev) (ISC); emoji appear only as game content, seated in tiles.
+
+Everything is composited cheaply on purpose. `backdrop-filter` is deliberately unused:
+on a full-screen or always-visible surface it forced a whole-viewport readback every
+frame and cost about 40 fps, while blurring only a smooth gradient. Layered
+translucency and inner highlights give the same look and hold 60 fps with 30 businesses
+running at 8x speed.
+
+## Credits
+
+- Icons: [Lucide](https://lucide.dev) — ISC License
+- Fonts: Outfit and Plus Jakarta Sans — SIL Open Font License 1.1 (see `fonts/README.md`)
 
 The engine has no DOM dependencies, so you can balance-test it from Node:
 

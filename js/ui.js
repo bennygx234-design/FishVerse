@@ -4,6 +4,9 @@
 (function (root) {
   'use strict';
   const D = root.MM_DATA, Charts = root.MM_CHARTS;
+  const I = root.MM_ICONS || (() => '');
+  const isSvg = v => typeof v === 'string' && v.charAt(0) === '<';
+  const emo = v => isSvg(v) ? v : `<span class="emo">${v}</span>`;
   const { PRODUCTS, BUSINESS_TYPES, TYPE_ORDER, UPGRADES, HQ_UPGRADES, COMPETITORS, CATEGORIES, ACHIEVEMENTS, TIPS, DIFFICULTY } = D;
   const $ = (sel, el = document) => el.querySelector(sel);
   const $$ = (sel, el = document) => Array.from(el.querySelectorAll(sel));
@@ -52,7 +55,7 @@
     const box = $('#toasts');
     const el = document.createElement('div');
     el.className = 'toast ' + kind;
-    el.innerHTML = `<div class="ico">${icon}</div><div><div class="t">${esc(title)}</div>${desc ? `<div class="d">${esc(desc)}</div>` : ''}</div>`;
+    el.innerHTML = `${emo(icon)}<div><div class="t">${esc(title)}</div>${desc ? `<div class="d">${esc(desc)}</div>` : ''}</div>`;
     box.appendChild(el);
     const maxToasts = root.innerWidth <= 760 ? 2 : 4;
     while (box.children.length > maxToasts) box.removeChild(box.firstChild);
@@ -117,7 +120,7 @@
       m.innerHTML = `<div class="modal-box ${cls} ${wide ? 'wide' : ''}">
         ${title ? `<h2>${icon ? `<span class="ico">${icon}</span>` : ''}<span>${esc(title)}</span></h2>` : ''}
         <div class="modal-body">${body}</div>
-        <div class="modal-actions">${actions.map((a, i) => `<button class="btn ${a.cls || ''}" data-mi="${i}">${esc(a.label)}</button>`).join('')}</div>
+        <div class="modal-actions">${actions.map((a, i) => `<button class="btn ${a.cls || ''}" data-mi="${i}">${a.icon ? I(a.icon, 16) : ''}${esc(a.label)}</button>`).join('')}</div>
       </div>`;
       m.classList.remove('hidden');
       m._actions = actions; m._onClose = onClose; m._locked = false;
@@ -139,19 +142,19 @@
   const pct = (x, d = 1) => (x * 100).toFixed(d) + '%';
   const sign = n => (n >= 0 ? '+' : '');
   function deltaHtml(now, prev, invert = false) {
-    if (prev == null || prev === 0) return '<span class="muted">—</span>';
+    if (prev == null || prev === 0) return '<span class="trend flat">—</span>';
     const d = (now - prev) / Math.abs(prev);
     const good = invert ? d <= 0 : d >= 0;
-    return `<span class="${good ? 'good' : 'bad'}">${d >= 0 ? '▲' : '▼'} ${Math.abs(d * 100).toFixed(1)}%</span>`;
+    return `<span class="trend ${good ? 'up' : 'down'}">${I(d >= 0 ? 'arrow-up' : 'arrow-down', 11)}${Math.abs(d * 100).toFixed(1)}%</span>`;
   }
   function dateLabel(day) { const y = Math.floor((day - 1) / 360) + 1, m = Math.floor(((day - 1) % 360) / 30) + 1, d = ((day - 1) % 30) + 1; return `Year ${y} · Month ${m} · Day ${d}`; }
   function levelDots(lvl, max) { let s = '<div class="lvl">'; for (let i = 0; i < max; i++) s += `<i class="${i < lvl ? 'on' : ''}"></i>`; return s + '</div>'; }
   function demandBadge(m) {
-    if (m >= 1.4) return '<span class="badge gold">🔥 Hot</span>';
-    if (m >= 1.12) return '<span class="badge good">↑ High</span>';
-    if (m <= 0.7) return '<span class="badge bad">🧊 Cold</span>';
-    if (m <= 0.88) return '<span class="badge bad">↓ Low</span>';
-    return '<span class="badge">→ Normal</span>';
+    if (m >= 1.4) return `<span class="badge gold">${I('flame', 12)}Hot</span>`;
+    if (m >= 1.12) return `<span class="badge good">${I('arrow-up', 12)}High</span>`;
+    if (m <= 0.7) return `<span class="badge bad">${I('arrow-down', 12)}Cold</span>`;
+    if (m <= 0.88) return `<span class="badge bad">${I('arrow-down', 12)}Low</span>`;
+    return '<span class="badge">Normal</span>';
   }
   function priceBadge(ratio) {
     if (ratio < 0.9) return '<span class="badge teal">Cheap</span>';
@@ -159,7 +162,7 @@
     if (ratio <= 1.4) return '<span class="badge gold">Pricey</span>';
     return '<span class="badge bad">Gouging</span>';
   }
-  function moraleLabel(w) { return w >= 1.3 ? '🤩 Thrilled' : w >= 1.1 ? '😀 Happy' : w >= 0.9 ? '😐 Content' : w >= 0.7 ? '😕 Grumbling' : '😠 Angry'; }
+  function moraleLabel(w) { const t = w >= 1.3 ? ['Thrilled', 'good'] : w >= 1.1 ? ['Happy', 'good'] : w >= 0.9 ? ['Content', ''] : w >= 0.7 ? ['Grumbling', 'bad'] : ['Angry', 'bad']; return `<span class="badge ${t[1]}">${t[0]}</span>`; }
   function tweenNumber(el, value, formatter) {
     const from = el._v == null ? value : el._v;
     el._v = value;
@@ -183,16 +186,28 @@
     view: 'dashboard', detailBiz: null, rivalsTab: 'leaderboard', marketMine: true, chartRange: 90, chartLog: false,
     lastRefresh: 0, lastChart: 0, structKey: '', mountedView: '', navDots: {}, restockDays: 3, tipIndex: 0, lastTipDay: -100,
 
+    // Replaces [data-icon] placeholders with inline SVG (keeps markup readable).
+    hydrateIcons(scope) {
+      $$('[data-icon]', scope || document).forEach(el => {
+        const name = el.dataset.icon, size = +el.dataset.size || 20;
+        if (el._icon === name + size) return;
+        el._icon = name + size;
+        el.innerHTML = I(name, size);
+      });
+    },
+    setIcon(sel, name, size) { const el = $(sel); if (el) { el._icon = null; el.dataset.icon = name; if (size) el.dataset.size = size; UI.hydrateIcons(el.parentNode || document); } },
+
     init(game, hooks) {
       G = game; H = hooks; fmt = n => G.fmt(n);
       Sound.init();
-      $('#btnMute').textContent = Sound.muted ? '🔇' : '🔊';
+      UI.hydrateIcons(document);
+      UI.setIcon('#btnMute', Sound.muted ? 'sound-off' : 'sound-on');
       // nav
       $$('.navbtn').forEach(b => b.addEventListener('click', () => { Sound.play('click'); UI.showView(b.dataset.view); }));
       $('#speedCtl').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; Sound.play('click'); H.setSpeed(+b.dataset.speed); UI.updateSpeedButtons(); });
       $('#btnHelp').addEventListener('click', () => { Sound.play('click'); UI.showHelp(); });
       $('#btnAch').addEventListener('click', () => { Sound.play('click'); UI.showAchievements(); });
-      $('#btnMute').addEventListener('click', () => { const m = Sound.toggle(); $('#btnMute').textContent = m ? '🔇' : '🔊'; if (!m) Sound.play('click'); });
+      $('#btnMute').addEventListener('click', () => { const m = Sound.toggle(); UI.setIcon('#btnMute', m ? 'sound-off' : 'sound-on'); if (!m) Sound.play('click'); });
       $('#btnMenu').addEventListener('click', () => { Sound.play('click'); UI.showMenu(); });
       $('#btnFeed').addEventListener('click', () => { Sound.play('click'); document.body.classList.toggle('feed-open'); const d = $('#btnFeed .dot'); if (d) d.remove(); });
       $('#btnFeedClose').addEventListener('click', () => document.body.classList.remove('feed-open'));
@@ -228,16 +243,16 @@
         case 'choiceResolved': toast({ icon: p.icon, title: p.msg, ttl: 5000 }); break;
         case 'unlock': toast({ icon: BUSINESS_TYPES[p.type].icon, title: `Unlocked: ${BUSINESS_TYPES[p.type].name}`, desc: BUSINESS_TYPES[p.type].blurb, kind: 'gold', ttl: 8000 }); Sound.play('unlock'); UI.navDots.businesses = true; UI.updateNavDots(); break;
         case 'achievement': toast({ icon: p.a.icon, title: `Achievement: ${p.a.name}`, desc: p.a.desc + (p.a.bonus ? ` Reward: ${fmt(p.a.bonus)}` : ''), kind: 'purple', ttl: 8000 }); Sound.play('achievement'); Confetti.burst(60, { power: 6 }); if (p.a.bonus) floatAt($('#topCash'), `+${fmt(p.a.bonus)}`, 'gold'); break;
-        case 'quest': toast({ icon: '📜', title: 'Quest complete!', desc: `${p.q.text} — reward ${fmt(p.q.reward)}`, kind: 'gold', ttl: 7000 }); Sound.play('cash'); floatAt($('#topCash'), `+${fmt(p.q.reward)}`, 'gold'); break;
-        case 'rankUp': toast({ icon: '🏁', title: p.passed ? `You overtook ${p.passed}!` : 'Rank up!', desc: `You are now #${p.rank} on the market leaderboard.`, kind: 'good', ttl: 6000 }); Sound.play('good'); break;
+        case 'quest': toast({ icon: I('scroll', 20), title: 'Quest complete!', desc: `${p.q.text} — reward ${fmt(p.q.reward)}`, kind: 'gold', ttl: 7000 }); Sound.play('cash'); floatAt($('#topCash'), `+${fmt(p.q.reward)}`, 'gold'); break;
+        case 'rankUp': toast({ icon: I('trophy', 20), title: p.passed ? `You overtook ${p.passed}!` : 'Rank up!', desc: `You are now #${p.rank} on the market leaderboard.`, kind: 'good', ttl: 6000 }); Sound.play('good'); break;
         case 'taunt': toast({ icon: p.icon, title: p.name, desc: p.text, ttl: 6000 }); break;
         case 'bigSale': toast({ icon: PRODUCTS[p.pid].icon, title: `${p.sold > 1 ? p.sold + '× ' : ''}${PRODUCTS[p.pid].name} sold!`, desc: `${p.biz.name} closed a deal worth ${fmt(p.price * p.sold)}.`, kind: 'good', ttl: 5000 }); Sound.play('cash'); break;
-        case 'overdraft': toast({ icon: '⚠️', title: 'Overdraft!', desc: `Cash is negative. Fix it within ${p.days} days or go bankrupt.`, kind: 'bad', ttl: 9000 }); Sound.play('alarm'); $('#app').classList.add('shake'); setTimeout(() => $('#app').classList.remove('shake'), 600); break;
-        case 'overdraftWarning': toast({ icon: '🚨', title: `Bankruptcy in ${p.left} days!`, desc: 'Sell inventory, sell a business, or take a loan now.', kind: 'bad', ttl: 9000 }); Sound.play('alarm'); break;
+        case 'overdraft': toast({ icon: I('alert', 20), title: 'Overdraft!', desc: `Cash is negative. Fix it within ${p.days} days or go bankrupt.`, kind: 'bad', ttl: 9000 }); Sound.play('alarm'); $('#app').classList.add('shake'); setTimeout(() => $('#app').classList.remove('shake'), 600); break;
+        case 'overdraftWarning': toast({ icon: I('alert', 20), title: `Bankruptcy in ${p.left} days!`, desc: 'Sell inventory, sell a business, or take a loan now.', kind: 'bad', ttl: 9000 }); Sound.play('alarm'); break;
         case 'bankrupt': H.pause(true); UI.showBankrupt(); break;
         case 'win': H.pause(true); UI.showWin(); break;
         case 'bizBought': toast({ icon: BUSINESS_TYPES[p.biz.type].icon, title: `${p.biz.name} is open!`, desc: 'Auto-restock is on. Check staffing and prices.', kind: 'good', ttl: 6000 }); Sound.play('buy'); Confetti.burst(50, { power: 6 }); break;
-        case 'bizSold': toast({ icon: '🏷️', title: `Sold ${p.biz.name}`, desc: `Received ${fmt(p.value)}.`, ttl: 5000 }); break;
+        case 'bizSold': toast({ icon: I('tag', 20), title: `Sold ${p.biz.name}`, desc: `Received ${fmt(p.value)}.`, ttl: 5000 }); break;
         case 'acquired': toast({ icon: p.icon, title: `Acquired ${p.name}!`, desc: `A new subsidiary joins your empire for ${fmt(p.price)}.`, kind: 'gold', ttl: 8000 }); Sound.play('win'); Confetti.burst(150, { power: 10 }); break;
         case 'upgrade': Sound.play('buy'); break;
         case 'hqUpgrade': Sound.play('buy'); toast({ icon: HQ_UPGRADES[p.id].icon, title: `${HQ_UPGRADES[p.id].name} Lv.${p.level}`, desc: HQ_UPGRADES[p.id].desc, kind: 'good', ttl: 4000 }); break;
@@ -249,7 +264,7 @@
       const list = $('#feedList'); if (!list) return;
       const el = document.createElement('div');
       el.className = 'feed-item ' + (item.kind || '');
-      el.innerHTML = `<div class="ico">${item.icon}</div><div><div>${esc(item.text)}</div><div class="day">Day ${G.S.day}</div></div>`;
+      el.innerHTML = `${emo(item.icon)}<div><div>${esc(item.text)}</div><div class="day">Day ${G.S.day}</div></div>`;
       list.insertBefore(el, list.firstChild);
       while (list.children.length > 60) list.removeChild(list.lastChild);
       // unread marker when the feed is collapsed into the drawer
@@ -260,7 +275,7 @@
       const list = $('#feedList'); list.innerHTML = '';
       for (const item of [...G.S.eventLog].reverse().slice(-60)) {
         const el = document.createElement('div'); el.className = 'feed-item ' + (item.kind || ''); el.style.animation = 'none';
-        el.innerHTML = `<div class="ico">${item.icon}</div><div><div>${esc(item.text)}</div><div class="day">Day ${item.day}</div></div>`;
+        el.innerHTML = `${emo(item.icon)}<div><div>${esc(item.text)}</div><div class="day">Day ${item.day}</div></div>`;
         list.insertBefore(el, list.firstChild);
       }
     },
@@ -315,6 +330,7 @@
         case 'rivals': v.innerHTML = UI.htmlRivals(); break;
       }
       UI.mountedView = UI.view;
+      UI.hydrateIcons(v);
       UI.renderQuests();
       UI.lastChart = 0; UI.sparkDay = -1;
     },
@@ -336,12 +352,12 @@
       const dayEl = $('#topDay');
       if (dayEl.textContent !== 'Day ' + S.day) { dayEl.textContent = 'Day ' + S.day; dayEl.classList.remove('ticking'); void dayEl.offsetWidth; dayEl.classList.add('ticking'); }
       setText('#topDate', dateLabel(Math.max(1, S.day)));
-      const cashEl = $('#topCash'); tweenNumber(cashEl, S.cash, fmt); cashEl.classList.toggle('neg', S.cash < 0);
+      tweenNumber($('#topCashValue'), S.cash, fmt); $('#topCash').classList.toggle('neg', S.cash < 0);
       const p = clamp(S.valuation / D.WIN_VALUE, 0, 1);
       $('#goalFill').style.width = Math.max(0.5, p * 100) + '%';
       setText('#goalPct', `${fmt(S.valuation)} · ${p < 0.001 ? (p * 100).toFixed(3) : (p * 100).toFixed(1)}%`);
-      setText('#sideRank', `#${S.rank} of ${G.ranking().length}`);
-      setHtml('#sideStreak', S.streak >= 3 ? `🔥 ${S.streak}-day profit streak` : `<span class="muted">Profit streak: ${S.streak}</span>`);
+      setText('#sideRank', `#${S.rank}`);
+      setHtml('#sideStreak', S.streak >= 3 ? `<span class="streak-chip" title="${S.streak}-day profit streak">${I('flame', 13)}<span>${S.streak}d streak</span></span>` : '');
       UI.updateSpeedButtons();
     },
 
@@ -355,10 +371,10 @@
         ['debt', 'Debt', 'accent-red'], ['inventory', 'Inventory value', ''], ['value', 'Company value', 'accent-gold'],
       ];
       return `
-        ${S.cash < 0 ? `<div class="danger-banner">⚠️ OVERDRAFT — you have ${10 - S.overdraftDays} days to get cash above zero. <button class="btn sm danger" data-action="view" data-view="bank">Go to Bank</button></div>` : ''}
+        ${S.cash < 0 ? `<div class="danger-banner">${I('alert', 19)}<span>Overdraft — ${10 - S.overdraftDays} days to get cash above zero.</span><button class="btn sm danger" data-action="view" data-view="bank">Go to Bank</button></div>` : ''}
         <div class="view-title"><div><h1>Dashboard</h1><div class="sub">${esc(S.company)} · ${DIFFICULTY[S.difficulty].name} · Share price <b class="mono" id="dashShare"></b></div></div>
-          <div class="row"><button class="btn sm" data-action="restockAll">📦 Restock all (${UI.restockDays}d)</button><button class="btn sm" data-action="pricesAll">🏷️ Suggested prices</button></div></div>
-        <div class="tip-box" id="tipBox"><span>💡</span><span id="tipText"></span></div>
+          <div class="row"><button class="btn sm" data-action="restockAll">${I('boxes', 16)}Restock all · ${UI.restockDays}d</button><button class="btn sm" data-action="pricesAll">${I('tag', 16)}Suggested prices</button></div></div>
+        <div class="tip-box" id="tipBox">${I('lightbulb', 19)}<span id="tipText"></span></div>
         <div class="grid cols-6" style="margin-top:14px">
           ${stats.map(([k, label, cls]) => `<div class="card stat-card ${cls}" id="stat-${k}"><div class="label"><span>${label}</span><span class="delta" data-d="${k}"></span></div><div class="value" data-v="${k}">—</div><div class="delta small muted" data-s="${k}"></div><canvas data-spark="${k}"></canvas></div>`).join('')}
         </div>
@@ -370,7 +386,7 @@
             <div class="row between small muted" style="margin-top:6px"><span id="valBreak"></span><span id="sentimentLbl"></span></div>
           </div>
           <div class="card">
-            <div class="row between"><h3>Revenue vs profit (30 days)</h3><div class="legend"><span><i style="background:#60a5fa"></i>Revenue</span><span><i style="background:#34d399"></i>Profit</span></div></div>
+            <div class="row between"><h3>Revenue vs profit (30 days)</h3><div class="legend"><span><i style="background:#5b9cff"></i>Revenue</span><span><i style="background:#2ee0b8"></i>Profit</span></div></div>
             <div class="chart-wrap"><canvas id="chartPL" height="230"></canvas></div>
           </div>
         </div>
@@ -394,12 +410,12 @@
         const s = $(`[data-s="${k}"]`);
         if (s) s.textContent = k === 'value' ? `7-day trend · rank #${S.rank}` : k === 'profit' ? `30-day avg ${fmt(S.ema30)}/day` : k === 'debt' ? `${S.loans.length} loan${S.loans.length === 1 ? '' : 's'} · ${(G.currentRate() * 100).toFixed(2)}%/day` : k === 'inventory' ? `${S.businesses.length} location${S.businesses.length === 1 ? '' : 's'}` : k === 'cash' ? (S.cash < 0 ? `⚠️ overdraft day ${S.overdraftDays}` : `credit available ${fmt(G.availableCredit())}`) : `${S.lastDay.units.toLocaleString()} units sold`;
         const canvas = $(`[data-spark="${k}"]`);
-        if (canvas && series[k] && series[k].length > 1 && canvas._day !== S.day) { canvas._day = S.day; Charts.spark(canvas, series[k].slice(-40), k === 'debt' ? '#f87171' : k === 'value' ? '#fbbf24' : '#2dd4bf'); }
+        if (canvas && series[k] && series[k].length > 1 && canvas._day !== S.day) { canvas._day = S.day; Charts.spark(canvas, series[k].slice(-40), k === 'debt' ? '#ff6b74' : k === 'value' ? '#ffc043' : k === 'profit' ? '#2ee0b8' : '#5b9cff'); }
       }
       setText('#dashShare', `${fmt(S.sharePrice)} / share`);
       setText('#valBreak', `Net assets ${fmt(S.netAssets)} + goodwill ${fmt(S.goodwill)} (${S.multiple.toFixed(0)}× avg profit)`);
       const sent = S.sentiment;
-      setHtml('#sentimentLbl', `Investor sentiment: <b class="${sent >= 1.05 ? 'good' : sent <= 0.95 ? 'bad' : ''}">${sent >= 1.15 ? '🚀 Euphoric' : sent >= 1.05 ? '😊 Optimistic' : sent <= 0.85 ? '😱 Panicked' : sent <= 0.95 ? '😟 Nervous' : '😐 Neutral'}</b>`);
+      setHtml('#sentimentLbl', `Sentiment <span class="badge ${sent >= 1.05 ? 'good' : sent <= 0.95 ? 'bad' : ''}">${sent >= 1.15 ? 'Euphoric' : sent >= 1.05 ? 'Optimistic' : sent <= 0.85 ? 'Panicked' : sent <= 0.95 ? 'Nervous' : 'Neutral'}</span>`);
       // P&L
       const L = S.lastDay;
       const rows = [['Revenue', L.revenue, 'good'], ['Cost of goods', -L.cogs], ['Wages', -L.wages], ['Rent', -L.rent], ['Marketing', -L.marketing], ['Interest', -L.interest], ['Spoilage', -(L.spoilage || 0)], ['Subsidiaries', L.subsidiaries || 0, 'good']].filter(r => r[1] !== 0 || r[0] === 'Revenue');
@@ -411,7 +427,7 @@
       // empire
       const staff = G.totalStaff();
       setHtml('#empireBox', `<div class="kv"><span>Businesses</span><span class="v">${S.businesses.length}</span></div><div class="kv"><span>Employees</span><span class="v">${staff}</span></div><div class="kv"><span>Subsidiaries</span><span class="v">${S.subsidiaries.length}</span></div><div class="kv"><span>Stock portfolio</span><span class="v">${fmt(G.portfolioValue())}</span></div><div class="kv"><span>Best streak</span><span class="v">${S.stats.bestStreak} days</span></div><div class="kv"><span>Achievements</span><span class="v">${Object.keys(S.achievements).length}/${ACHIEVEMENTS.length}</span></div>
-        <div class="row" style="margin-top:10px;flex-wrap:wrap"><button class="btn sm primary" data-action="view" data-view="businesses">🏬 Manage businesses</button><button class="btn sm" data-action="view" data-view="rivals">⚔️ Rivals</button></div>`);
+        <div class="row" style="margin-top:12px"><button class="btn sm primary" data-action="view" data-view="businesses">${I('store', 16)}Manage businesses</button><button class="btn sm" data-action="view" data-view="rivals">${I('rivals', 16)}Rivals</button></div>`);
       UI.refreshTip();
     },
     refreshTip() {
@@ -432,15 +448,15 @@
       const S = G.S;
       if (UI.view === 'dashboard') {
         const cv = $('#chartVal'), cp = $('#chartPL');
-        if (cv) { const data = S.history.valuation.slice(-UI.chartRange); Charts.line(cv, data, { color: '#fbbf24', log: UI.chartLog, startDay: S.day - data.length + 1, height: 230 }); }
+        if (cv) { const data = S.history.valuation.slice(-UI.chartRange); Charts.line(cv, data, { color: '#5b9cff', log: UI.chartLog, startDay: S.day - data.length + 1, height: 230 }); }
         if (cp) { const r = S.history.revenue.slice(-30), p = S.history.profit.slice(-30); Charts.bars(cp, r, p, { startDay: S.day - r.length + 1, height: 230 }); }
       } else if (UI.view === 'market') {
-        $$('canvas[data-mspark]').forEach(c => { const m = S.market[c.dataset.mspark]; if (m) Charts.spark(c, m.history.slice(-30), '#60a5fa', 28); });
+        $$('canvas[data-mspark]').forEach(c => { const m = S.market[c.dataset.mspark]; if (m) Charts.spark(c, m.history.slice(-30), '#5b9cff', 28); });
       } else if (UI.view === 'rivals') {
-        $$('canvas[data-rspark]').forEach(c => { const hist = c.dataset.rspark === 'you' ? S.history.valuation : (G._comp(c.dataset.rspark) || {}).history; if (hist) Charts.spark(c, hist.slice(-30), c.dataset.rspark === 'you' ? '#fbbf24' : '#a78bfa', 28); });
+        $$('canvas[data-rspark]').forEach(c => { const hist = c.dataset.rspark === 'you' ? S.history.valuation : (G._comp(c.dataset.rspark) || {}).history; if (hist) Charts.spark(c, hist.slice(-30), c.dataset.rspark === 'you' ? '#ffc043' : '#9d8cff', 28); });
       } else if (UI.view === 'businesses' && UI.detailBiz) {
         const c = $('#bizChart'); const b = G.biz(UI.detailBiz);
-        if (c && b) Charts.bars(c, b.history.slice(-30), null, { colorA: '#34d399', height: 140, startDay: S.day - Math.min(30, b.history.length) + 1 });
+        if (c && b) Charts.bars(c, b.history.slice(-30), null, { colorA: '#2ee0b8', height: 140, startDay: S.day - Math.min(30, b.history.length) + 1 });
       }
     },
 
@@ -450,7 +466,7 @@
     htmlBusinesses() {
       const S = G.S;
       return `<div class="view-title"><div><h1>Businesses</h1><div class="sub">${S.businesses.length} location${S.businesses.length === 1 ? '' : 's'} · ${G.totalStaff()} employees</div></div>
-        <div class="row"><button class="btn sm" data-action="autoAll">🤖 Auto-restock all</button><button class="btn sm" data-action="restockAll">📦 Restock all (${UI.restockDays}d)</button><button class="btn sm" data-action="pricesAll">🏷️ Suggested prices</button></div></div>
+        <div class="row"><button class="btn sm" data-action="autoAll">${I('bolt', 16)}Auto-restock all</button><button class="btn sm" data-action="restockAll">${I('boxes', 16)}Restock all · ${UI.restockDays}d</button><button class="btn sm" data-action="pricesAll">${I('tag', 16)}Suggested prices</button></div></div>
         <div class="grid auto" id="bizGrid">${S.businesses.map(b => UI.htmlBizCard(b)).join('') || '<div class="card empty">You own no businesses. Buy one below before the bank comes knocking.</div>'}</div>
         <div class="section"><div class="view-title"><div><h1 style="font-size:18px">Expand your empire</h1><div class="sub">New business types unlock as your company value grows.</div></div></div>
         <div class="grid auto" id="shopGrid">${TYPE_ORDER.map(t => UI.htmlShopCard(t)).join('')}</div></div>`;
@@ -458,7 +474,7 @@
     htmlBizCard(b) {
       const T = BUSINESS_TYPES[b.type];
       return `<div class="card biz-card" data-action="openBiz" data-id="${b.id}" id="bizcard-${b.id}">
-        <div class="head"><div class="ico">${T.icon}</div><div><div class="name">${esc(b.name)}</div><div class="type">${T.name}</div></div></div>
+        <div class="head"><div class="ico">${T.icon}</div><div><div class="name">${esc(b.name)}</div><div class="type">${b.name === T.name ? `Tier ${T.tier} · ${D.CATEGORIES[PRODUCTS[T.products[0]].cat]}` : T.name}</div></div></div>
         <div class="warn" data-warn></div>
         <div class="stats">
           <div>Profit/day <b data-f="profit"></b></div><div>Staff <b data-f="staff"></b></div>
@@ -477,7 +493,7 @@
         <div class="small muted">Sells: ${T.products.map(p => PRODUCTS[p].icon + ' ' + PRODUCTS[p].name).join(', ')}</div>
         <div class="small muted">Base traffic ${T.traffic} · rent ${fmt(T.rent)}/day · wage ${fmt(T.wage)}/day</div>
         <div class="row between" style="margin-top:4px"><span class="price" data-f="cost"></span>
-          ${unlocked ? `<button class="btn sm primary" data-action="buyBiz" data-type="${t}" data-f="buybtn">Open</button>` : `<span class="badge">🔒 Needs ${fmt(T.unlock)} value</span>`}</div>
+          ${unlocked ? `<button class="btn sm primary" data-action="buyBiz" data-type="${t}" data-f="buybtn">Open</button>` : `<span class="badge">${I('lock', 12)}Needs ${fmt(T.unlock)}</span>`}</div>
       </div>`;
     },
     refreshBusinesses() {
@@ -491,7 +507,7 @@
         for (const pid of T.products) { const e = Math.max(b.last.expected[pid] || 0, 0.01); minDays = Math.min(minDays, b.stock[pid] / e); }
         const p = $('[data-f="profit"]', card); p.textContent = fmt(profit); p.className = profit >= 0 ? 'good' : 'bad';
         const st = $('[data-f="staff"]', card); st.textContent = `${b.staff} / ${rec}`; st.className = b.staff < rec ? 'bad' : '';
-        const sk = $('[data-f="stock"]', card); sk.textContent = minDays === Infinity ? '—' : minDays < 1 ? `${minDays.toFixed(1)}d ⚠️` : `${minDays.toFixed(1)} days`; sk.className = minDays < 1 ? 'bad' : minDays < 2 ? 'gold' : '';
+        const sk = $('[data-f="stock"]', card); sk.textContent = minDays === Infinity ? '—' : `${minDays.toFixed(1)} days`; sk.className = minDays < 1 ? 'bad' : minDays < 2 ? 'gold' : '';
         const sv = $('[data-f="service"]', card); sv.textContent = pct(b.last.serviceRatio, 0); sv.className = b.last.serviceRatio < 0.85 ? 'bad' : '';
         $('[data-f="rep"]', card).textContent = Math.round(b.rep);
         const rb = $('[data-f="repbar"]', card); rb.style.width = b.rep + '%'; rb.className = 'fill ' + (b.rep >= 70 ? 'green' : b.rep >= 40 ? 'gold' : 'red');
@@ -516,22 +532,22 @@
     // ============================================================================
     htmlBizDetail(b) {
       const S = G.S, T = BUSINESS_TYPES[b.type];
-      return `<div class="view-title"><div class="row"><button class="btn sm" data-action="backBiz">← All businesses</button><h1 style="margin-left:8px">${T.icon} <span id="bizName">${esc(b.name)}</span></h1><button class="btn xs ghost" data-action="rename" data-id="${b.id}" title="Rename">✏️</button></div>
-        <div class="row"><span class="badge">${T.name}</span><button class="btn sm danger" data-action="sellBiz" data-id="${b.id}">Sell for <span data-f="salevalue"></span></button></div></div>
+      return `<div class="view-title"><div class="row"><button class="btn sm ghost" data-action="backBiz">${I('arrow-left', 16)}All businesses</button><h1><span class="emo">${T.icon}</span><span id="bizName">${esc(b.name)}</span></h1><button class="btn xs ghost icon-only" data-action="rename" data-id="${b.id}" title="Rename">${I('pencil', 15)}</button></div>
+        <div class="row"><span class="badge">${T.name}</span><button class="btn sm danger" data-action="sellBiz" data-id="${b.id}">${I('tag', 15)}Sell for <span data-f="salevalue"></span></button></div></div>
         <div class="grid cols-3">
           <div class="card"><h3>Reputation</h3><div class="row"><span class="big-num" data-f="rep"></span><span class="muted small" data-f="repnote"></span></div><div class="bar" style="margin-top:6px"><div class="fill" data-f="repbar"></div></div><div class="small muted" style="margin-top:6px">Reputation multiplies foot traffic (×<span data-f="repmult"></span>). Stockouts, understaffing and price gouging hurt it.</div></div>
           <div class="card"><h3>Yesterday</h3><div class="pl-row"><span>Revenue</span><span class="mono good" data-f="rev"></span></div><div class="pl-row"><span>Cost of goods</span><span class="mono muted" data-f="cogs"></span></div><div class="pl-row"><span>Wages</span><span class="mono muted" data-f="wages"></span></div><div class="pl-row"><span>Rent + marketing</span><span class="mono muted" data-f="rentmk"></span></div><div class="pl-row total"><span>Profit</span><span class="mono" data-f="profit"></span></div></div>
           <div class="card"><h3>Profit (30 days)</h3><div class="chart-wrap"><canvas id="bizChart" height="140"></canvas></div></div>
         </div>
         <div class="card section">
-          <div class="row between"><h3>Products &amp; pricing</h3><div class="row"><span class="small muted">Buy for:</span><div class="btngroup">${[1, 3, 7].map(d => `<button class="btn xs ${UI.restockDays === d ? 'primary' : ''}" data-action="setRestockDays" data-days="${d}">${d} day${d > 1 ? 's' : ''}</button>`).join('')}</div><button class="btn sm" data-action="buyAllBiz" data-id="${b.id}">📦 Restock all products</button><button class="btn sm" data-action="pricesBiz" data-id="${b.id}">🏷️ Suggested prices</button></div></div>
+          <div class="row between"><h3>Products &amp; pricing</h3><div class="row"><span class="small muted">Buy for:</span><div class="btngroup">${[1, 3, 7].map(d => `<button class="btn xs ${UI.restockDays === d ? 'primary' : ''}" data-action="setRestockDays" data-days="${d}">${d} day${d > 1 ? 's' : ''}</button>`).join('')}</div><button class="btn sm" data-action="buyAllBiz" data-id="${b.id}">${I('boxes', 16)}Restock all</button><button class="btn sm" data-action="pricesBiz" data-id="${b.id}">${I('tag', 16)}Suggested prices</button></div></div>
           ${T.products.map(pid => UI.htmlProductRow(b, pid)).join('')}
         </div>
         <div class="grid cols-2 section">
           <div class="card"><h3>Staff &amp; wages</h3>
             <div class="staff-box">
               <div><div class="muted small">Employees</div><div class="row"><span class="big-num" data-f="staff"></span><span class="muted small">recommended <b data-f="recstaff"></b></span></div>
-                <div class="btngroup" style="margin-top:8px"><button class="btn sm" data-action="fire" data-id="${b.id}" data-n="5">−5</button><button class="btn sm" data-action="fire" data-id="${b.id}" data-n="1">−1</button><button class="btn sm primary" data-action="hire" data-id="${b.id}" data-n="1">+1</button><button class="btn sm primary" data-action="hire" data-id="${b.id}" data-n="5">+5</button><button class="btn sm gold" data-action="hireRec" data-id="${b.id}">Auto-fit</button></div>
+                <div class="btngroup" style="margin-top:8px"><button class="btn sm" data-action="fire" data-id="${b.id}" data-n="5">−5</button><button class="btn sm" data-action="fire" data-id="${b.id}" data-n="1">−1</button><button class="btn sm primary" data-action="hire" data-id="${b.id}" data-n="1">+1</button><button class="btn sm primary" data-action="hire" data-id="${b.id}" data-n="5">+5</button><button class="btn sm gold" data-action="hireRec" data-id="${b.id}">${I('users', 15)}Auto-fit</button></div>
                 <div class="small muted" style="margin-top:6px">Daily wage bill: <b data-f="wagebill"></b> · firing costs 2 days' pay</div></div>
               <div><div class="muted small">Service level <span class="muted">(customers served)</span></div><div class="row"><span class="big-num" data-f="service"></span></div><div class="bar" style="margin-top:6px"><div class="fill" data-f="servicebar"></div></div>
                 <div class="small muted" style="margin-top:8px">Capacity <b data-f="capacity"></b> units/day vs demand <b data-f="demandunits"></b></div></div>
@@ -624,7 +640,7 @@
       const soldBy = pid => TYPE_ORDER.filter(t => BUSINESS_TYPES[t].products.includes(pid)).map(t => BUSINESS_TYPES[t].icon).join(' ');
       return `<div class="view-title"><div><h1>Market</h1><div class="sub">Wholesale prices move with supply and demand. Big purchases push prices up; they recover over time.</div></div>
         <div class="row"><div class="tabs" style="margin:0"><button class="${UI.marketMine ? 'active' : ''}" data-action="marketMine" data-v="1">My products</button><button class="${!UI.marketMine ? 'active' : ''}" data-action="marketMine" data-v="0">All products</button></div>
-        <div class="btngroup">${[1, 3, 7].map(d => `<button class="btn xs ${UI.restockDays === d ? 'primary' : ''}" data-action="setRestockDays" data-days="${d}">${d}d</button>`).join('')}</div><button class="btn sm primary" data-action="restockAll">📦 Restock all businesses</button></div></div>
+        <div class="btngroup">${[1, 3, 7].map(d => `<button class="btn xs ${UI.restockDays === d ? 'primary' : ''}" data-action="setRestockDays" data-days="${d}">${d}d</button>`).join('')}</div><button class="btn sm primary" data-action="restockAll">${I('boxes', 16)}Restock all businesses</button></div></div>
         <div class="card"><div class="table-wrap"><table class="table"><thead><tr><th>Product</th><th>Category</th><th class="num">Wholesale</th><th>30-day trend</th><th class="num">7d change</th><th>Demand</th><th>Supply</th><th>Sold at</th></tr></thead>
         <tbody>${pids.map(pid => { const p = PRODUCTS[pid]; return `<tr id="mrow-${pid}"><td><b>${p.icon} ${p.name}</b>${p.perishable ? ' <span class="badge">perishable</span>' : ''}</td><td class="muted">${CATEGORIES[p.cat]}</td><td class="num" data-f="cost"></td><td style="width:120px"><canvas data-mspark="${pid}" style="width:110px;height:28px"></canvas></td><td class="num" data-f="ch"></td><td data-f="demand"></td><td data-f="supply"></td><td>${soldBy(pid)}</td></tr>`; }).join('')}</tbody></table></div>
         ${pids.length ? '' : '<div class="empty">No products yet — open a business first.</div>'}</div>
@@ -655,7 +671,7 @@
       return `<div class="view-title"><div><h1>Bank</h1><div class="sub">Credit grows with your net assets. Interest is charged daily and rises the more you borrow.</div></div></div>
         <div class="grid cols-3">
           <div class="card"><h3>Credit line</h3><div class="big-num teal" data-f="avail"></div><div class="small muted">available of <b data-f="limit"></b></div><div class="bar" style="margin-top:8px"><div class="fill gold" data-f="utilbar"></div></div><div class="small muted" style="margin-top:6px">Utilization <b data-f="util"></b> · rate <b data-f="rate"></b>/day</div></div>
-          <div class="card"><h3>Take a loan</h3><div class="row"><input class="input" type="number" min="100" step="100" id="loanAmt" placeholder="Amount" style="flex:1"><button class="btn primary" data-action="takeLoan">Borrow</button></div>
+          <div class="card"><h3>Take a loan</h3><div class="row"><input class="input" type="number" min="100" step="100" id="loanAmt" placeholder="Amount" style="flex:1"><button class="btn primary" data-action="takeLoan">${I('hand-coins', 16)}Borrow</button></div>
             <div class="btngroup" style="margin-top:8px">${[0.25, 0.5, 1].map(f => `<button class="btn xs" data-action="loanPreset" data-f="${f}">${f * 100}%</button>`).join('')}</div>
             <div class="small muted" style="margin-top:8px">Daily cost at current rate: <b data-f="dailycost"></b> per ${fmt(10000)} borrowed. Max ${5} loans.</div></div>
           <div class="card"><h3>Debt</h3><div class="big-num" data-f="debt"></div><div class="small muted">interest paid yesterday <b data-f="interest"></b></div><div class="small" style="margin-top:8px" data-f="danger"></div></div>
@@ -663,7 +679,7 @@
         <div class="card section"><h3>Loans</h3>
           ${S.loans.length ? `<div class="table-wrap"><table class="table"><thead><tr><th>#</th><th class="num">Balance</th><th class="num">Rate</th><th>Taken</th><th class="num">Interest paid</th><th></th></tr></thead><tbody>${S.loans.map(l => `<tr id="loan-${l.id}"><td>${l.id}</td><td class="num" data-f="bal"></td><td class="num" data-f="rate"></td><td>Day ${l.day}</td><td class="num" data-f="paid"></td><td class="right"><div class="btngroup"><button class="btn xs" data-action="repay" data-id="${l.id}" data-frac="0.25">Repay 25%</button><button class="btn xs primary" data-action="repay" data-id="${l.id}" data-frac="1">Repay all</button></div></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">No loans. Debt-free and dangerous.</div>'}
         </div>
-        <div class="card section"><h3>Emergency cash</h3><div class="row wrap"><button class="btn sm danger" data-action="liquidateAll">Sell ALL inventory (50% of cost)</button><span class="small muted">Raises <b data-f="liq"></b>. Businesses can be sold from their detail page.</span></div></div>`;
+        <div class="card section"><h3>Emergency cash</h3><div class="row wrap"><button class="btn sm danger" data-action="liquidateAll">${I('alert', 15)}Sell all inventory (50% of cost)</button><span class="small muted">Raises <b data-f="liq"></b>. Businesses can be sold from their detail page.</span></div></div>`;
     },
     refreshBank() {
       const S = G.S;
@@ -674,7 +690,7 @@
       setText('[data-f="util"]', pct(util, 0)); setText('[data-f="rate"]', (G.currentRate() * 100).toFixed(2) + '%');
       setText('[data-f="dailycost"]', fmt(10000 * G.currentRate()));
       setText('[data-f="debt"]', fmt(debt)); setText('[data-f="interest"]', fmt(S.lastDay.interest));
-      setHtml('[data-f="danger"]', S.cash < 0 ? `<span class="bad">⚠️ Overdraft day ${S.overdraftDays}/10 — 1% daily penalty on the negative balance.</span>` : '<span class="good">Accounts in good standing.</span>');
+      setHtml('[data-f="danger"]', S.cash < 0 ? `<span class="badge bad">${I('alert', 12)}Overdraft day ${S.overdraftDays}/10</span> <span class="muted">1% daily penalty on the negative balance.</span>` : `<span class="badge good">${I('circle-check', 12)}In good standing</span>`);
       const fx = G.activeEffects();
       for (const l of S.loans) { const row = $(`#loan-${l.id}`); if (!row) continue; setText('[data-f="bal"]', fmt(l.amount), row); setText('[data-f="rate"]', (l.rate * fx.rate * 100).toFixed(2) + '%/day', row); setText('[data-f="paid"]', fmt(l.paidInterest), row); }
       setText('[data-f="liq"]', fmt(G.totalInventoryValue() * 0.5));
@@ -705,7 +721,7 @@
       const S = G.S;
       const rows = G.ranking();
       const lb = `<div class="card"><div class="table-wrap"><table class="table"><thead><tr><th>#</th><th>Company</th><th class="num">Value</th><th class="num">7d</th><th>Trend</th><th>Focus</th><th></th></tr></thead><tbody>
-        ${rows.map(r => { const def = r.you ? null : COMPETITORS.find(c => c.id === r.id); return `<tr class="${r.you ? 'you' : ''}" id="rrow-${r.id}"><td><b data-f="rank"></b></td><td>${r.icon} <b>${esc(r.name)}</b>${r.you ? ' <span class="badge teal">YOU</span>' : ''}</td><td class="num" data-f="val"></td><td class="num" data-f="ch"></td><td style="width:110px"><canvas data-rspark="${r.id}" style="width:100px;height:28px"></canvas></td><td class="small muted">${def ? (def.types[0] === '*' ? 'Everything' : def.types.map(t => BUSINESS_TYPES[t].icon).join(' ')) : '—'}</td><td class="right">${def ? `<button class="btn xs gold" data-action="acquire" data-id="${r.id}" data-f="acq"></button>` : ''}</td></tr>`; }).join('')}
+        ${rows.map(r => { const def = r.you ? null : COMPETITORS.find(c => c.id === r.id); return `<tr class="${r.you ? 'you' : ''}" id="rrow-${r.id}"><td><b data-f="rank"></b></td><td>${r.icon} <b>${esc(r.name)}</b>${r.you ? ' <span class="badge teal">YOU</span>' : ''}</td><td class="num" data-f="val"></td><td class="num" data-f="ch"></td><td style="width:110px"><canvas data-rspark="${r.id}" style="width:100px;height:28px"></canvas></td><td class="small muted">${def ? (def.types[0] === '*' ? 'Everything' : def.types.map(t => BUSINESS_TYPES[t].icon).join(' ')) : '—'}</td><td class="right">${def ? `<button class="btn xs" data-action="acquire" data-id="${r.id}" data-f="acq"></button>` : ''}</td></tr>`; }).join('')}
         ${S.subsidiaries.map(s => `<tr><td class="muted">—</td><td class="muted">${s.icon} ${esc(s.name)} <span class="badge good">Acquired</span></td><td class="num muted">${fmt(s.value)}</td><td></td><td></td><td></td><td></td></tr>`).join('')}
         </tbody></table></div><div class="small muted" style="margin-top:8px">Acquire a rival when your value is 1.5× theirs and you can pay 125% of their value in cash. Acquisitions become subsidiaries paying 0.4%/day.</div></div>`;
       const stocks = `<div class="grid cols-3"><div class="card"><h3>Portfolio value</h3><div class="big-num gold" data-f="pfval"></div><div class="small muted">unrealized <b data-f="pfpl"></b> · realized <b data-f="realized"></b></div></div><div class="card"><h3>Cash</h3><div class="big-num" data-f="cash"></div><div class="small muted">0.5% fee per trade</div></div><div class="card"><h3>Sentiment</h3><div class="big-num" data-f="sent"></div><div class="small muted">Rival stocks follow market mood. Crashes are buying opportunities.</div></div></div>
@@ -713,7 +729,7 @@
         ${COMPETITORS.map((def, i) => { const c = S.competitors[i]; if (c.acquired) return ''; return `<tr id="srow-${def.id}"><td>${def.icon} <b>${def.name}</b></td><td class="num" data-f="price"></td><td class="num" data-f="ch"></td><td class="num" data-f="own"></td><td class="num" data-f="pl"></td><td><div class="row"><input class="input sm" type="number" min="10" step="100" placeholder="$" data-stockamt="${def.id}"><button class="btn xs primary" data-action="buyStock" data-id="${def.id}">Buy</button><button class="btn xs" data-action="sellStock" data-id="${def.id}" data-frac="0.5">Sell ½</button><button class="btn xs" data-action="sellStock" data-id="${def.id}" data-frac="1">Sell all</button></div></td></tr>`; }).join('')}
         </tbody></table></div></div>`;
       return `<div class="view-title"><div><h1>Rivals &amp; Stocks</h1><div class="sub">Eight AI companies compete for your customers. Beat them, buy their stock, or buy them outright.</div></div>
-        <div class="tabs" style="margin:0"><button class="${UI.rivalsTab === 'leaderboard' ? 'active' : ''}" data-action="rivalsTab" data-tab="leaderboard">🏆 Leaderboard</button><button class="${UI.rivalsTab === 'stocks' ? 'active' : ''}" data-action="rivalsTab" data-tab="stocks">📈 Stock market</button></div></div>
+        <div class="tabs" style="margin:0"><button class="${UI.rivalsTab === 'leaderboard' ? 'active' : ''}" data-action="rivalsTab" data-tab="leaderboard">${I('trophy', 15)}Leaderboard</button><button class="${UI.rivalsTab === 'stocks' ? 'active' : ''}" data-action="rivalsTab" data-tab="stocks">${I('chart-line', 15)}Stock market</button></div></div>
         ${UI.rivalsTab === 'leaderboard' ? lb : stocks}`;
     },
     refreshRivals() {
@@ -722,12 +738,12 @@
         const rows = G.ranking();
         for (const r of rows) {
           const row = $(`#rrow-${r.id}`); if (!row) continue;
-          setText('[data-f="rank"]', r.rank === 1 ? '👑 1' : String(r.rank), row);
+          setHtml('[data-f="rank"]', r.rank === 1 ? `<span class="gold">${I('crown', 15)} 1</span>` : String(r.rank), row);
           setText('[data-f="val"]', fmt(r.value), row);
           const hist = r.you ? S.history.valuation : r.hist; const prev = hist && hist.length > 7 ? hist[hist.length - 8] : (hist ? hist[0] : null);
           setHtml('[data-f="ch"]', deltaHtml(r.value, prev), row);
           const btn = $('[data-f="acq"]', row);
-          if (btn) { const can = G.canAcquire(r.id); btn.disabled = !can; btn.textContent = can ? `Acquire · ${fmt(G.acquisitionPrice(r.id))}` : `Acquire (${fmt(G.acquisitionPrice(r.id))})`; btn.classList.toggle('glow', can); }
+          if (btn) { const can = G.canAcquire(r.id); btn.disabled = !can; btn.textContent = `Acquire · ${fmt(G.acquisitionPrice(r.id))}`; btn.classList.toggle('gold', can); btn.classList.toggle('glow', can); }
         }
       } else {
         let pfCost = 0; const pfVal = G.portfolioValue();
@@ -736,7 +752,7 @@
         const pl = pfVal - pfCost; const plEl = $('[data-f="pfpl"]'); if (plEl) { plEl.textContent = `${sign(pl)}${fmt(pl)}`; plEl.className = pl >= 0 ? 'good' : 'bad'; }
         const rl = $('[data-f="realized"]'); if (rl) { rl.textContent = `${sign(S.stats.tradingProfit)}${fmt(S.stats.tradingProfit)}`; rl.className = S.stats.tradingProfit >= 0 ? 'good' : 'bad'; }
         setText('[data-f="cash"]', fmt(S.cash));
-        setText('[data-f="sent"]', S.sentiment >= 1.15 ? '🚀 Euphoric' : S.sentiment >= 1.05 ? '😊 Optimistic' : S.sentiment <= 0.85 ? '😱 Panicked' : S.sentiment <= 0.95 ? '😟 Nervous' : '😐 Neutral');
+        setText('[data-f="sent"]', S.sentiment >= 1.15 ? 'Euphoric' : S.sentiment >= 1.05 ? 'Optimistic' : S.sentiment <= 0.85 ? 'Panicked' : S.sentiment <= 0.95 ? 'Nervous' : 'Neutral');
         for (let i = 0; i < COMPETITORS.length; i++) {
           const def = COMPETITORS[i], c = S.competitors[i]; const row = $(`#srow-${def.id}`); if (!row) continue;
           const price = c.value / D.SHARES; setText('[data-f="price"]', fmt(price), row);
@@ -753,7 +769,7 @@
     // ============================================================================
     renderQuests() {
       const S = G.S, box = $('#questList'); if (!box) return;
-      const html = S.quests.map(q => { const p = clamp(q.progress / q.target, 0, 1); const isMoney = ['earn_cash', 'value', 'cash'].includes(q.tid); return `<div class="quest ${q.done ? 'done' : ''}"><div class="row between"><span>${q.done ? '✅ ' : ''}${esc(q.text)}</span><span class="reward">+${fmt(q.reward)}</span></div><div class="qbar"><div class="fill" style="width:${p * 100}%"></div></div><div class="small muted">${isMoney ? fmt(Math.max(0, q.progress)) : Math.floor(Math.max(0, q.progress)).toLocaleString()} / ${isMoney ? fmt(q.target) : q.target.toLocaleString()}</div></div>`; }).join('');
+      const html = S.quests.map(q => { const p = clamp(q.progress / q.target, 0, 1); const isMoney = ['earn_cash', 'value', 'cash'].includes(q.tid); return `<div class="quest ${q.done ? 'done' : ''}"><div class="row between"><span class="qtxt">${q.done ? I('circle-check', 14) + ' ' : ''}${esc(q.text)}</span><span class="reward">+${fmt(q.reward)}</span></div><div class="qbar"><div class="fill" style="width:${p * 100}%"></div></div><div class="small muted">${isMoney ? fmt(Math.max(0, q.progress)) : Math.floor(Math.max(0, q.progress)).toLocaleString()} / ${isMoney ? fmt(q.target) : q.target.toLocaleString()}</div></div>`; }).join('');
       if (box.innerHTML !== html) box.innerHTML = html;
     },
 
@@ -763,7 +779,7 @@
     onClick(e) {
       const el = e.target.closest('[data-action]'); if (!el) return;
       const S = G.S, a = el.dataset.action, id = +el.dataset.id;
-      const flash = (ok, msg) => { if (!ok) { toast({ icon: '🚫', title: msg || 'Cannot do that', kind: 'bad', ttl: 2500 }); Sound.play('bad'); } };
+      const flash = (ok, msg) => { if (!ok) { toast({ icon: I('circle-x', 20), title: msg || 'Cannot do that', kind: 'bad', ttl: 2500 }); Sound.play('bad'); } };
       switch (a) {
         case 'view': UI.showView(el.dataset.view); return;
         case 'openBiz': Sound.play('click'); UI.openBusiness(id); return;
@@ -774,13 +790,13 @@
         case 'rivalsTab': UI.rivalsTab = el.dataset.tab; UI.render(true); return;
         case 'setRestockDays': UI.restockDays = +el.dataset.days; UI.render(true); return;
         case 'buyBiz': { const r = G.buyBusiness(el.dataset.type); flash(r.ok, r.msg); if (r.ok) floatAt(el, `-${fmt(r.biz.paid)}`, 'bad'); break; }
-        case 'sellBiz': { const b = G.biz(id); if (!b) return; Modal.open({ title: `Sell ${b.name}?`, icon: '🏷️', body: `<p>You will receive <b class="gold">${fmt(G.bizSaleValue(b))}</b> (55% of purchase price, 40% of upgrades, 50% of inventory). This cannot be undone.</p>`, actions: [{ label: 'Keep it', cls: '' }, { label: 'Sell', cls: 'danger', fn: () => { G.sellBusiness(id); UI.detailBiz = null; UI.render(true); } }] }); return; }
+        case 'sellBiz': { const b = G.biz(id); if (!b) return; Modal.open({ title: `Sell ${b.name}?`, icon: I('tag', 24), body: `<p>You will receive <b class="gold">${fmt(G.bizSaleValue(b))}</b> (55% of purchase price, 40% of upgrades, 50% of inventory). This cannot be undone.</p>`, actions: [{ label: 'Keep it', cls: '' }, { label: 'Sell', cls: 'danger', fn: () => { G.sellBusiness(id); UI.detailBiz = null; UI.render(true); } }] }); return; }
         case 'rename': { const b = G.biz(id); const name = prompt('Rename business:', b.name); if (name) { G.renameBusiness(id, name); } break; }
         case 'buy': case 'buyMax': { const b = G.biz(id), pid = el.dataset.pid; if (!b) return; const exp = G.expectedDemand(b, pid); const qty = a === 'buyMax' ? 1e12 : Math.max(1, Math.ceil(exp * UI.restockDays)); const r = G.buyInventory(id, pid, qty); flash(r.ok, r.msg); if (r.ok) { Sound.play('buy'); floatAt(el, `-${fmt(r.cost)}`, 'bad'); } break; }
         case 'buyAllBiz': { const b = G.biz(id); let spent = 0; for (const pid of BUSINESS_TYPES[b.type].products) { const r = G.buyInventory(id, pid, Math.ceil(G.expectedDemand(b, pid) * UI.restockDays), true); if (r.ok) spent += r.cost; } if (spent) { Sound.play('buy'); floatAt(el, `-${fmt(spent)}`, 'bad'); } else flash(false, 'Nothing bought — storage full or no cash.'); break; }
-        case 'restockAll': { let spent = 0; for (const b of S.businesses) for (const pid of BUSINESS_TYPES[b.type].products) { const r = G.buyInventory(b.id, pid, Math.ceil(G.expectedDemand(b, pid) * UI.restockDays), true); if (r.ok) spent += r.cost; } if (spent) { Sound.play('buy'); toast({ icon: '📦', title: `Restocked everything for ${fmt(spent)}`, ttl: 3000 }); } else flash(false, 'Nothing to restock (storage full or no cash).'); break; }
-        case 'autoAll': { const on = !S.businesses.every(b => b.autoRestock); for (const b of S.businesses) G.setAutoRestock(b.id, on, UI.restockDays + 1); toast({ icon: '🤖', title: on ? 'Auto-restock enabled everywhere' : 'Auto-restock disabled', ttl: 2500 }); Sound.play('click'); break; }
-        case 'pricesAll': for (const b of S.businesses) G.applySuggestedPrices(b.id); toast({ icon: '🏷️', title: 'Prices set to suggested levels', ttl: 2500 }); Sound.play('click'); break;
+        case 'restockAll': { let spent = 0; for (const b of S.businesses) for (const pid of BUSINESS_TYPES[b.type].products) { const r = G.buyInventory(b.id, pid, Math.ceil(G.expectedDemand(b, pid) * UI.restockDays), true); if (r.ok) spent += r.cost; } if (spent) { Sound.play('buy'); toast({ icon: I('boxes', 20), title: `Restocked everything for ${fmt(spent)}`, ttl: 3000 }); } else flash(false, 'Nothing to restock (storage full or no cash).'); break; }
+        case 'autoAll': { const on = !S.businesses.every(b => b.autoRestock); for (const b of S.businesses) G.setAutoRestock(b.id, on, UI.restockDays + 1); toast({ icon: I('bolt', 20), title: on ? 'Auto-restock enabled everywhere' : 'Auto-restock disabled', ttl: 2500 }); Sound.play('click'); break; }
+        case 'pricesAll': for (const b of S.businesses) G.applySuggestedPrices(b.id); toast({ icon: I('tag', 20), title: 'Prices set to suggested levels', ttl: 2500 }); Sound.play('click'); break;
         case 'pricesBiz': G.applySuggestedPrices(id); Sound.play('click'); break;
         case 'priceStep': { const b = G.biz(id), pid = el.dataset.pid; const step = Math.max(0.05, G.fairPrice(pid) * 0.05); G.setPrice(id, pid, b.prices[pid] + step * +el.dataset.dir); Sound.play('click'); break; }
         case 'hire': G.hire(id, +el.dataset.n); Sound.play('click'); break;
@@ -790,10 +806,10 @@
         case 'toggleAutoPrice': { const b = G.biz(id); if (!S.hq.analytics) { flash(false, 'Buy the Analytics Suite at HQ first.'); return; } G.setAutoPrice(id, !b.autoPrice); Sound.play('click'); break; }
         case 'upgrade': { const b = G.biz(id); const cost = G.upgradeCost(b, el.dataset.uid); const r = G.buyUpgrade(id, el.dataset.uid); flash(r.ok, r.msg); if (r.ok) { floatAt(el, `-${fmt(cost)}`, 'bad'); toast({ icon: UPGRADES[el.dataset.uid].icon, title: `${UPGRADES[el.dataset.uid].name} Lv.${b.upgrades[el.dataset.uid]} at ${b.name}`, kind: 'good', ttl: 3000 }); } break; }
         case 'hq': { const r = G.buyHqUpgrade(el.dataset.id); flash(r.ok, r.msg); break; }
-        case 'takeLoan': { const amt = +$('#loanAmt').value; const r = G.takeLoan(amt); flash(r.ok, r.msg); if (r.ok) { floatAt(el, `+${fmt(amt)}`, 'gold'); toast({ icon: '🏦', title: `Loan approved: ${fmt(amt)}`, kind: 'good', ttl: 3000 }); } break; }
+        case 'takeLoan': { const amt = +$('#loanAmt').value; const r = G.takeLoan(amt); flash(r.ok, r.msg); if (r.ok) { floatAt(el, `+${fmt(amt)}`, 'gold'); toast({ icon: I('bank', 20), title: `Loan approved: ${fmt(amt)}`, kind: 'good', ttl: 3000 }); } break; }
         case 'loanPreset': $('#loanAmt').value = Math.floor(G.availableCredit() * +el.dataset.f); return;
         case 'repay': { const loan = S.loans.find(l => l.id === id); if (!loan) return; const r = G.repayLoan(id, Math.ceil(loan.amount * +el.dataset.frac)); flash(r.ok, r.msg); if (r.ok) Sound.play('cash'); break; }
-        case 'liquidateAll': { Modal.open({ title: 'Sell all inventory?', icon: '🧯', body: `<p>Every unit in every store will be sold at half its cost, raising about <b class="gold">${fmt(G.totalInventoryValue() * 0.5)}</b>. Your shelves will be empty tomorrow.</p>`, actions: [{ label: 'Cancel' }, { label: 'Sell everything', cls: 'danger', fn: () => { let got = 0; for (const b of S.businesses) for (const pid in b.stock) { const r = G.sellInventory(b.id, pid, b.stock[pid]); if (r.ok) got += r.value; } toast({ icon: '🧯', title: `Liquidated inventory for ${fmt(got)}`, ttl: 4000 }); UI.render(true); } }] }); return; }
+        case 'liquidateAll': { Modal.open({ title: 'Sell all inventory?', icon: I('alert', 24), body: `<p>Every unit in every store will be sold at half its cost, raising about <b class="gold">${fmt(G.totalInventoryValue() * 0.5)}</b>. Your shelves will be empty tomorrow.</p>`, actions: [{ label: 'Cancel' }, { label: 'Sell everything', cls: 'danger', fn: () => { let got = 0; for (const b of S.businesses) for (const pid in b.stock) { const r = G.sellInventory(b.id, pid, b.stock[pid]); if (r.ok) got += r.value; } toast({ icon: I('boxes', 20), title: `Liquidated inventory for ${fmt(got)}`, ttl: 4000 }); UI.render(true); } }] }); return; }
         case 'buyStock': { const inp = $(`[data-stockamt="${el.dataset.id}"]`); const r = G.buyShares(el.dataset.id, +inp.value || 0); flash(r.ok, r.msg); if (r.ok) { Sound.play('buy'); inp.value = ''; } break; }
         case 'sellStock': { const pos = S.portfolio[el.dataset.id]; if (!pos) { flash(false, 'You own no shares.'); return; } const r = G.sellShares(el.dataset.id, pos.shares * +el.dataset.frac); flash(r.ok, r.msg); if (r.ok) { Sound.play('cash'); floatAt(el, `${sign(r.profit)}${fmt(r.profit)}`, r.profit >= 0 ? 'good' : 'bad'); } break; }
         case 'acquire': { const def = COMPETITORS.find(c => c.id === el.dataset.id); Modal.open({ title: `Acquire ${def.name}?`, icon: def.icon, body: `<p>Pay <b class="gold">${fmt(G.acquisitionPrice(def.id))}</b> in cash to absorb ${def.name}. They stop competing with you and become a subsidiary paying <b>${fmt(G._comp(def.id).value * 0.004)}/day</b>.</p>`, actions: [{ label: 'Not yet' }, { label: 'Sign the deal', cls: 'gold', fn: () => { const r = G.acquireCompetitor(def.id); flash(r.ok, r.msg); UI.render(true); } }] }); return; }
@@ -827,7 +843,7 @@
       m._locked = true;
     },
     showHelp() {
-      Modal.open({ title: 'How to play', icon: '📖', wide: true, body: `
+      Modal.open({ title: 'How to play', icon: I('help', 24), wide: true, body: `
         <ul class="help-list">
           <li><b>Goal:</b> grow your company value from ~$1,000 to <b>$1,000,000,000</b>. Value = net assets + goodwill (a multiple of your average daily profit, boosted by growth and investor sentiment).</li>
           <li><b>Businesses:</b> each store sells 4 products. Buy inventory at wholesale, set retail prices, hire enough staff to serve everyone. Empty shelves and long queues wreck your reputation, and reputation multiplies traffic.</li>
@@ -843,16 +859,16 @@
     },
     showAchievements() {
       const S = G.S;
-      Modal.open({ title: `Achievements (${Object.keys(S.achievements).length}/${ACHIEVEMENTS.length})`, icon: '🏅', wide: true, body: `<div class="ach-grid">${ACHIEVEMENTS.map(a => { const got = S.achievements[a.id]; return `<div class="ach ${got ? (S.day - got < 3 ? 'new' : '') : 'locked'}"><div class="ico">${a.icon}</div><b>${a.name}</b><span>${a.desc}</span>${a.bonus ? `<span class="gold">+${fmt(a.bonus)}</span>` : ''}${got ? `<span>Day ${got}</span>` : ''}</div>`; }).join('')}</div>`, actions: [{ label: 'Close', cls: 'primary' }] });
+      Modal.open({ title: `Achievements (${Object.keys(S.achievements).length}/${ACHIEVEMENTS.length})`, icon: I('medal', 24), wide: true, body: `<div class="ach-grid">${ACHIEVEMENTS.map(a => { const got = S.achievements[a.id]; return `<div class="ach ${got ? (S.day - got < 3 ? 'new' : '') : 'locked'}"><div class="ico">${a.icon}</div><b>${a.name}</b><span>${a.desc}</span>${a.bonus ? `<span class="gold">+${fmt(a.bonus)}</span>` : ''}${got ? `<span>Day ${got}</span>` : ''}</div>`; }).join('')}</div>`, actions: [{ label: 'Close', cls: 'primary' }] });
     },
     showMenu() {
       const wasPaused = H.isPaused(); H.pause(true);
-      Modal.open({ title: 'Menu', icon: '☰', body: `<p class="muted small">Progress autosaves every 5 days and whenever you leave the page.</p>`, actions: [
-        { label: '▶ Resume', cls: 'primary', fn: () => { if (!wasPaused) H.pause(false); } },
-        { label: '💾 Save now', fn: () => { H.save(); toast({ icon: '💾', title: 'Game saved', ttl: 2000 }); if (!wasPaused) H.pause(false); } },
-        { label: UI.debug ? '🩺 Hide diagnostics' : '🩺 Diagnostics', fn: () => { UI.setDebug(!UI.debug); if (!wasPaused) H.pause(false); } },
-        { label: '📖 How to play', fn: () => { UI.showHelp(); $('#modal')._onClose = () => { if (!wasPaused) H.pause(false); }; return true; } },
-        { label: '🔁 New game', cls: 'danger', fn: () => { Modal.open({ title: 'Start over?', icon: '⚠️', body: '<p>Your current company will be deleted. This cannot be undone.</p>', actions: [{ label: 'Cancel', fn: () => { if (!wasPaused) H.pause(false); } }, { label: 'Delete & restart', cls: 'danger', fn: () => H.newGame() }] }); return true; } },
+      Modal.open({ title: 'Menu', icon: I('menu', 24), body: `<p class="muted small">Progress autosaves every 5 days and whenever you leave the page.</p>`, actions: [
+        { label: 'Resume', icon: 'play', cls: 'primary', fn: () => { if (!wasPaused) H.pause(false); } },
+        { label: 'Save now', icon: 'save', fn: () => { H.save(); toast({ icon: I('save', 20), title: 'Game saved', ttl: 2000 }); if (!wasPaused) H.pause(false); } },
+        { label: UI.debug ? 'Hide diagnostics' : 'Diagnostics', icon: 'activity', fn: () => { UI.setDebug(!UI.debug); if (!wasPaused) H.pause(false); } },
+        { label: 'How to play', icon: 'help', fn: () => { UI.showHelp(); $('#modal')._onClose = () => { if (!wasPaused) H.pause(false); }; return true; } },
+        { label: 'New game', icon: 'refresh', cls: 'danger', fn: () => { Modal.open({ title: 'Start over?', icon: I('alert', 24), body: '<p>Your current company will be deleted. This cannot be undone.</p>', actions: [{ label: 'Cancel', fn: () => { if (!wasPaused) H.pause(false); } }, { label: 'Delete & restart', cls: 'danger', fn: () => H.newGame() }] }); return true; } },
       ], onClose: () => { if (!wasPaused && !Modal.isOpen()) H.pause(false); } });
     },
     showWin() {
@@ -863,7 +879,7 @@
       const m = Modal.open({ title: 'YOU DID IT!', icon: '🏆', cls: 'win', body: `<p style="font-size:16px">${esc(S.company)} is worth <b class="gold">${fmt(S.valuation)}</b>. From a corner store with $1,000 to a billion-dollar empire in <b>${S.day} days</b>.</p>
         <div class="stat-grid"><div class="kv"><span>Businesses</span><span class="v">${S.businesses.length}</span></div><div class="kv"><span>Employees</span><span class="v">${G.totalStaff()}</span></div><div class="kv"><span>Total profit</span><span class="v">${fmt(S.stats.totalProfit)}</span></div><div class="kv"><span>Units sold</span><span class="v">${S.stats.unitsSold.toLocaleString()}</span></div><div class="kv"><span>Market rank</span><span class="v">#${S.rank}</span></div><div class="kv"><span>Achievements</span><span class="v">${Object.keys(S.achievements).length}/${ACHIEVEMENTS.length}</span></div></div>
         <p class="muted small">Keep playing to crush every rival, or start a new run on a harder difficulty.</p>`,
-        actions: [{ label: '🔁 New game', fn: () => H.newGame() }, { label: '▶ Keep playing', cls: 'gold', fn: () => { S.flags.continued = true; H.pause(false); } }], onClose: () => H.pause(false) });
+        actions: [{ label: 'New game', icon: 'refresh', fn: () => H.newGame() }, { label: 'Keep playing', icon: 'play', cls: 'gold', fn: () => { S.flags.continued = true; H.pause(false); } }], onClose: () => H.pause(false) });
       m._locked = true;
     },
     showBankrupt() {
@@ -871,11 +887,11 @@
       const m = Modal.open({ title: 'BANKRUPT', icon: '💀', cls: 'dead', body: `<p>${esc(S.company)} could not pay its debts. The bank has seized everything.</p>
         <div class="stat-grid"><div class="kv"><span>Survived</span><span class="v">${S.day} days</span></div><div class="kv"><span>Peak value</span><span class="v">${fmt(S.stats.peakValue)}</span></div><div class="kv"><span>Businesses owned</span><span class="v">${S.stats.bizBought + 1}</span></div><div class="kv"><span>Total revenue</span><span class="v">${fmt(S.stats.totalRevenue)}</span></div></div>
         <p class="muted small">Tip: keep a cash buffer for wages and rent, and never let an overdraft run for more than a few days.</p>`,
-        actions: [{ label: '🔁 Try again', cls: 'primary', fn: () => H.newGame() }] });
+        actions: [{ label: 'Try again', icon: 'refresh', cls: 'primary', fn: () => H.newGame() }] });
       m._locked = true;
     },
     showOffline(r) {
-      Modal.open({ title: 'While you were away', icon: '⏰', body: `<p>Your managers ran the empire for <b>${r.days} days</b>.</p><div class="stat-grid"><div class="kv"><span>Cash</span><span class="v ${r.cashDelta >= 0 ? 'good' : 'bad'}">${sign(r.cashDelta)}${fmt(r.cashDelta)}</span></div><div class="kv"><span>Company value</span><span class="v ${r.valueDelta >= 0 ? 'good' : 'bad'}">${sign(r.valueDelta)}${fmt(r.valueDelta)}</span></div></div>`, actions: [{ label: 'Back to work', cls: 'primary' }] });
+      Modal.open({ title: 'While you were away', icon: I('clock', 24), body: `<p>Your managers ran the empire for <b>${r.days} days</b>.</p><div class="stat-grid"><div class="kv"><span>Cash</span><span class="v ${r.cashDelta >= 0 ? 'good' : 'bad'}">${sign(r.cashDelta)}${fmt(r.cashDelta)}</span></div><div class="kv"><span>Company value</span><span class="v ${r.valueDelta >= 0 ? 'good' : 'bad'}">${sign(r.valueDelta)}${fmt(r.valueDelta)}</span></div></div>`, actions: [{ label: 'Back to work', cls: 'primary' }] });
     },
     setDebug(on) {
       UI.debug = !!on;
