@@ -4,7 +4,7 @@
 (function (root) {
   'use strict';
   const D = root.MM_DATA || (typeof require !== 'undefined' ? require('./data.js') : null);
-  const { PRODUCTS, BUSINESS_TYPES, TYPE_ORDER, UPGRADES, HQ_UPGRADES, COMPETITORS, EVENTS, QUEST_TEMPLATES, ACHIEVEMENTS, DIFFICULTY } = D;
+  const { PRODUCTS, BUSINESS_TYPES, TYPE_ORDER, UPGRADES, HQ_UPGRADES, COMPETITORS, EVENTS, QUEST_TEMPLATES, ACHIEVEMENTS, DIFFICULTY, ECONOMY, TAX_BRACKETS } = D;
 
   // ---------- helpers ---------------------------------------------------------
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -90,15 +90,15 @@
         valuation: 0, sharePrice: 0, netAssets: 0, goodwill: 0, multiple: 0,
         ema7: 0, ema30: 0,
         history: { valuation: [], cash: [], revenue: [], profit: [], debt: [], rank: [] },
-        streak: 0, overdraftDays: 0,
+        streak: 0, overdraftDays: 0, taxLossCarry: 0, econ: 2,
         quests: [], questCooldown: 0,
         achievements: {},
         unlocked: {},
         stats: { unitsSold: 0, totalRevenue: 0, totalProfit: 0, loansTaken: 0, loansRepaid: 0, maxStaff: 0, recessionsSurvived: 0,
           rivalsBeaten: 0, reachedRank1: false, acquisitions: 0, biggestSale: 0, tradingProfit: 0, bestStreak: 0, questsDone: 0,
-          upgradesBought: 0, eventsSeen: 0, unitsByProduct: {}, peakValue: 0, bizBought: 0 },
+          upgradesBought: 0, eventsSeen: 0, unitsByProduct: {}, peakValue: 0, bizBought: 0, taxPaid: 0 },
         flags: { won: false, bankrupt: false, tutorial: 0, continued: false },
-        lastDay: { revenue: 0, cogs: 0, wages: 0, rent: 0, marketing: 0, interest: 0, other: 0, profit: 0, units: 0, subsidiaries: 0 },
+        lastDay: { revenue: 0, cogs: 0, wages: 0, rent: 0, marketing: 0, overhead: 0, upkeep: 0, hqUpkeep: 0, interest: 0, tax: 0, other: 0, pretax: 0, profit: 0, units: 0, subsidiaries: 0 },
         rank: 0,
         savedAt: Date.now(),
       };
@@ -132,7 +132,7 @@
         staff: T.staff, wageMult: 1.0, marketing: 0, rep: 50,
         autoRestock: false, stockDays: 4, autoPrice: false,
         stock: {}, avgCost: {}, prices: {}, upgrades: {},
-        last: { revenue: 0, cogs: 0, wages: 0, rent: 0, marketing: 0, profit: 0, sold: {}, expected: {}, lostStock: 0, lostStaff: 0, serviceRatio: 1, units: 0, spoiled: 0 },
+        last: { revenue: 0, cogs: 0, wages: 0, rent: 0, marketing: 0, overhead: 0, upkeep: 0, pretax: 0, tax: 0, net: 0, profit: 0, sold: {}, expected: {}, lostStock: 0, lostStaff: 0, serviceRatio: 1, units: 0, spoiled: 0 },
         history: [],
         boughtDay: S.day,
       };
@@ -145,29 +145,102 @@
       return biz;
     }
 
+    // ---------- upgrade effects ------------------------------------------------
+    // Effects are additive per level unless the key ends in "Mult" (multiplicative).
+    bizEff(biz, key) {
+      let v = 0;
+      for (const uid in UPGRADES) {
+        const lvl = biz.upgrades[uid] || 0; if (!lvl) continue;
+        const f = UPGRADES[uid].fx[key]; if (f != null) v += f * lvl;
+      }
+      return v;
+    }
+    bizEffMul(biz, key) {
+      let v = 1;
+      for (const uid in UPGRADES) {
+        const lvl = biz.upgrades[uid] || 0; if (!lvl) continue;
+        const f = UPGRADES[uid].fx[key]; if (f != null) v *= Math.pow(f, lvl);
+      }
+      return v;
+    }
+    hqEff(key) {
+      let v = 0;
+      for (const id in HQ_UPGRADES) {
+        const lvl = this.S.hq[id] || 0; if (!lvl) continue;
+        const f = HQ_UPGRADES[id].fx[key]; if (f != null) v += f * lvl;
+      }
+      return v;
+    }
+    diff() { return DIFFICULTY[this.S.difficulty] || DIFFICULTY.normal; }
+
     // ---------- derived values ----------------------------------------------------
     fairPrice(pid) { return this.S.market[pid].cost * PRODUCTS[pid].markup; }
-    buyCost(pid) { return this.S.market[pid].cost * (1 - 0.05 * this.S.hq.logistics); }
+    buyCost(pid, biz) {
+      const disc = this.hqEff('buyCost') + (biz ? this.bizEff(biz, 'buyCost') : 0);
+      return this.S.market[pid].cost * clamp(1 + disc, 0.4, 1);
+    }
     capacity(biz, pid) {
       const T = BUSINESS_TYPES[biz.type];
-      return Math.max(2, Math.ceil(T.traffic * PRODUCTS[pid].weight * (10 + 5 * biz.upgrades.storage)));
+      const days = 10 + this.bizEff(biz, 'capacityDays') + this.hqEff('capacityDays');
+      return Math.max(2, Math.ceil(T.traffic * PRODUCTS[pid].weight * days));
     }
     productivity(biz, fx) {
-      return clamp(0.5 + 0.5 * biz.wageMult, 0.7, 1.3) * (1 + 0.03 * this.S.hq.hr) * (fx ? fx.productivity : 1);
+      return clamp(0.5 + 0.5 * biz.wageMult, 0.7, 1.3)
+        * (1 + this.bizEff(biz, 'productivity') + this.hqEff('productivity'))
+        * (fx ? fx.productivity : 1);
     }
     throughput(biz, fx) {
       const T = BUSINESS_TYPES[biz.type];
-      const auto = 1 + 0.3 * biz.upgrades.automation;
+      const auto = 1 + this.bizEff(biz, 'throughput');
       if (biz.staff <= 0) return 0.25 * T.staffCap * auto;
       return biz.staff * T.staffCap * this.productivity(biz, fx) * auto;
     }
+    // Talent gets pricier as the company grows and competes for it.
+    wageIndex() {
+      const v = Math.max(1, this.S.valuation / 20000);
+      const soften = 1 + this.hqEff('wageInflation');
+      return 1 + ECONOMY.wageInflation * Math.log10(v) * clamp(soften, 0.4, 1);
+    }
     dailyWage(biz, fx) {
       const T = BUSINESS_TYPES[biz.type];
-      return T.wage * biz.wageMult * (1 - 0.06 * this.S.hq.hr) * (fx ? fx.wage : 1);
+      const eff = clamp(1 + this.hqEff('wages') + this.bizEff(biz, 'wages'), 0.45, 1.4);
+      return T.wage * biz.wageMult * eff * this.wageIndex() * (fx ? fx.wage : 1);
+    }
+    repFloor(biz) { return clamp(this.bizEff(biz, 'repFloor') + this.hqEff('repFloor'), 0, 60); }
+
+    // ---------- overhead, upkeep and tax ------------------------------------------
+    overheadRate() {
+      const n = this.S.businesses.length;
+      const raw = ECONOMY.overheadBase + ECONOMY.overheadPerBiz * Math.max(0, n - 1);
+      return clamp(raw, 0, ECONOMY.overheadMax) * clamp(1 + this.hqEff('overhead'), 0.5, 1) * this.diff().overhead;
+    }
+    bizOverhead(biz) { return BUSINESS_TYPES[biz.type].rent * this.overheadRate(); }
+    totalOverhead() { let v = 0; for (const b of this.S.businesses) v += this.bizOverhead(b); return v; }
+    upgradeUpkeep(biz, uid) {
+      const U = UPGRADES[uid], lvl = biz.upgrades[uid] || 0;
+      let sum = 0;
+      for (let i = 0; i < lvl; i++) sum += BUSINESS_TYPES[biz.type].cost * U.cost * Math.pow(U.growth, i);
+      return sum * U.upkeep;
+    }
+    bizUpkeep(biz) { let v = 0; for (const uid in UPGRADES) v += this.upgradeUpkeep(biz, uid); return v; }
+    hqUpkeep() {
+      let v = 0;
+      for (const id in HQ_UPGRADES) {
+        const H = HQ_UPGRADES[id], lvl = this.S.hq[id] || 0;
+        for (let i = 0; i < lvl; i++) v += H.base * Math.pow(H.mult, i) * H.upkeep;
+      }
+      return v;
+    }
+    taxRate() {
+      const avg = Math.max(0, this.S.ema30);
+      let rate = TAX_BRACKETS[TAX_BRACKETS.length - 1].rate;
+      for (const b of TAX_BRACKETS) if (avg <= b.upTo) { rate = b.rate; break; }
+      return clamp((rate - this.hqEff('taxCut')) * this.diff().tax, 0, 0.45);
     }
     marketingFactor(biz) {
       const T = BUSINESS_TYPES[biz.type];
-      return 1 + 0.4 * (1 - Math.exp(-biz.marketing / (T.rent * 3)));
+      const power = 0.4 * (1 + this.bizEff(biz, 'marketing'));
+      return 1 + power * (1 - Math.exp(-biz.marketing / (T.rent * 3)));
     }
     competitionFactor(type, fx) {
       let pressure = 0;
@@ -180,7 +253,8 @@
     }
     saturation(type) {
       const n = this.S.businesses.filter(b => b.type === type).length;
-      return Math.pow(0.9, Math.max(0, n - 1));
+      const s = clamp(ECONOMY.saturation - this.hqEff('saturation'), 0.5, 0.97);
+      return Math.pow(s, Math.max(0, n - 1));
     }
     repFactor(rep) { return 0.6 + 0.8 * rep / 100; }
     trafficFor(biz, pid, fx) {
@@ -188,9 +262,7 @@
       const p = PRODUCTS[pid];
       const diff = DIFFICULTY[this.S.difficulty];
       return T.traffic * p.weight
-        * (1 + 0.08 * biz.upgrades.renovation)
-        * (1 + 0.06 * this.S.hq.marketing)
-        * (biz.upgrades.loyalty ? 1.1 : 1)
+        * (1 + this.bizEff(biz, 'traffic') + this.hqEff('traffic'))
         * this.saturation(biz.type)
         * this.repFactor(biz.rep)
         * this.marketingFactor(biz)
@@ -200,7 +272,7 @@
     }
     demandMult(biz, pid, fx) {
       const p = PRODUCTS[pid];
-      let m = this.S.market[pid].demand;
+      let m = this.S.market[pid].demand * (1 + this.bizEff(biz, 'demand'));
       if (fx) m *= fx.demandAll * (fx.demandCat[p.cat] || 1) * (fx.demandBiz[biz.type] || 1) * (fx.demandProduct[pid] || 1);
       return m;
     }
@@ -208,7 +280,7 @@
       const p = PRODUCTS[pid];
       const fair = this.fairPrice(pid);
       const ratio = Math.max(0.05, price / fair);
-      const el = p.elasticity * Math.pow(0.8, biz.upgrades.premium);
+      const el = Math.max(0.5, p.elasticity * (1 + this.bizEff(biz, 'priceSens') + this.hqEff('priceSens')));
       return clamp(Math.pow(ratio, -el), 0, 3);
     }
     // Expected units demanded today for product at given price (before staffing limits)
@@ -235,28 +307,40 @@
       for (const cid in this.S.portfolio) { const c = this._comp(cid); if (c) v += this.S.portfolio[cid].shares * c.value / D.SHARES; }
       return v;
     }
-    creditLimit() { return Math.round(2000 + 0.5 * Math.max(0, this.S.netAssets) + 0.1 * this.S.goodwill); }
+    creditLimit() { return Math.round((2500 + 0.75 * Math.max(0, this.S.netAssets) + 0.22 * this.S.goodwill) * (1 + this.hqEff('credit'))); }
     availableCredit() { return Math.max(0, this.creditLimit() - this.totalDebt()); }
     currentRate(fx) {
       const util = this.creditLimit() > 0 ? clamp(this.totalDebt() / this.creditLimit(), 0, 1) : 1;
-      return BASE_RATE * DIFFICULTY[this.S.difficulty].rate * (1 + util) * (fx ? fx.rate : (this._fx ? this._fx.rate : 1));
+      const dept = clamp(1 + this.hqEff('interest'), 0.4, 1);
+      return BASE_RATE * this.diff().rate * (1 + util) * dept * (fx ? fx.rate : (this._fx ? this._fx.rate : 1));
     }
     bizCost(type) {
       const T = BUSINESS_TYPES[type];
       const n = this.S.businesses.filter(b => b.type === type).length;
-      return Math.round(T.cost * Math.pow(1.35, n) * (1 - 0.08 * this.S.hq.franchise));
+      return Math.round(T.cost * Math.pow(ECONOMY.bizCostGrowth, n) * clamp(1 + this.hqEff('bizCost'), 0.5, 1));
     }
     upgradeCost(biz, uid) {
       const U = UPGRADES[uid];
-      const lvl = biz.upgrades[uid];
+      const lvl = biz.upgrades[uid] || 0;
       if (lvl >= U.max) return null;
-      return Math.round(BUSINESS_TYPES[biz.type].cost * U.costFactor * Math.pow(1.6, lvl));
+      return Math.round(BUSINESS_TYPES[biz.type].cost * U.cost * Math.pow(U.growth, lvl));
     }
     hqCost(id) {
       const H = HQ_UPGRADES[id];
-      const lvl = this.S.hq[id];
+      const lvl = this.S.hq[id] || 0;
       if (lvl >= H.max) return null;
       return Math.round(H.base * Math.pow(H.mult, lvl));
+    }
+    // Returns null when unlocked, otherwise the reason it is still locked.
+    upgradeLock(biz, uid) {
+      const req = UPGRADES[uid].req; if (!req) return null;
+      for (const k in req) if ((biz.upgrades[k] || 0) < req[k]) return `Needs ${UPGRADES[k].name} level ${req[k]}`;
+      return null;
+    }
+    hqLock(id) {
+      const req = HQ_UPGRADES[id].req; if (!req) return null;
+      for (const k in req) if ((this.S.hq[k] || 0) < req[k]) return `Needs ${HQ_UPGRADES[k].name} level ${req[k]}`;
+      return null;
     }
     bizSaleValue(biz) { return Math.round(biz.paid * 0.55 + biz.upgradesPaid * 0.4 + this.inventoryValue(biz) * 0.5); }
     _comp(id) { const i = COMPETITORS.findIndex(c => c.id === id); return i >= 0 ? this.S.competitors[i] : null; }
@@ -315,7 +399,7 @@
       const cap = this.capacity(biz, pid);
       qty = Math.min(qty, cap - biz.stock[pid]);
       if (qty <= 0) return { ok: false, msg: 'Storage is full. Buy a Storage Expansion.' };
-      const unit = this.buyCost(pid);
+      const unit = this.buyCost(pid, biz);
       const affordable = Math.floor(S.cash / unit);
       if (affordable <= 0) return { ok: false, msg: 'Not enough cash.' };
       qty = Math.min(qty, affordable);
@@ -326,7 +410,8 @@
       biz.stock[pid] += qty;
       // supply pressure: big purchases push wholesale prices up
       const m = S.market[pid];
-      m.supply = clamp(m.supply - qty / (PRODUCTS[pid].volume * 12), 0.25, 1.6);
+      const impact = clamp(1 + this.hqEff('supplyImpact'), 0.2, 1);
+      m.supply = clamp(m.supply - (qty * impact) / (PRODUCTS[pid].volume * 12), 0.25, 1.6);
       if (!silent) this.emit('spend', { amount: cost, what: 'inventory' });
       return { ok: true, qty, cost };
     }
@@ -413,9 +498,12 @@
       if (!biz) return { ok: false };
       const cost = this.upgradeCost(biz, uid);
       if (cost === null) return { ok: false, msg: 'Max level reached.' };
+      const lock = this.upgradeLock(biz, uid);
+      if (lock) return { ok: false, msg: lock + '.' };
       if (S.cash < cost) return { ok: false, msg: 'Not enough cash.' };
       S.cash -= cost; biz.upgrades[uid]++; biz.upgradesPaid += cost; S.stats.upgradesBought++;
-      if (uid === 'renovation') biz.rep = clamp(biz.rep + 10, 0, 100);
+      const inst = UPGRADES[uid].instant;
+      if (inst && inst.rep) biz.rep = clamp(biz.rep + inst.rep, 0, 100);
       this.emit('upgrade', { biz, uid, level: biz.upgrades[uid] });
       this._checkAchievements();
       return { ok: true };
@@ -424,6 +512,8 @@
       const S = this.S;
       const cost = this.hqCost(id);
       if (cost === null) return { ok: false, msg: 'Max level reached.' };
+      const lock = this.hqLock(id);
+      if (lock) return { ok: false, msg: lock + '.' };
       if (S.cash < cost) return { ok: false, msg: 'Not enough cash.' };
       S.cash -= cost; S.hq[id]++; S.stats.upgradesBought++;
       this.log(HQ_UPGRADES[id].icon, `${HQ_UPGRADES[id].name} upgraded to level ${S.hq[id]}.`, 'good');
@@ -531,7 +621,8 @@
       }
       S.day++;
       const fx = this._fx = this.activeEffects();
-      const day = { revenue: 0, cogs: 0, wages: 0, rent: 0, marketing: 0, interest: 0, other: 0, profit: 0, units: 0, subsidiaries: 0, spoilage: 0, fees: 0 };
+      const day = { revenue: 0, cogs: 0, wages: 0, rent: 0, marketing: 0, overhead: 0, upkeep: 0, hqUpkeep: 0, interest: 0, tax: 0,
+        other: 0, pretax: 0, profit: 0, units: 0, subsidiaries: 0, spoilage: 0, fees: 0 };
 
       // 1. auto pricing & auto restock
       for (const biz of S.businesses) {
@@ -545,7 +636,29 @@
       S.cash -= day.interest;
       for (const sub of S.subsidiaries) { day.subsidiaries += sub.income; sub.value *= 1.001; sub.income = sub.value * 0.004; }
       S.cash += day.subsidiaries;
-      day.profit = day.revenue - day.cogs - day.wages - day.rent - day.marketing - day.interest - day.spoilage + day.subsidiaries;
+      day.hqUpkeep = this.hqUpkeep();
+      S.cash -= day.hqUpkeep;
+      day.pretax = day.revenue - day.cogs - day.wages - day.rent - day.marketing - day.spoilage
+        - day.overhead - day.upkeep - day.hqUpkeep - day.interest + day.subsidiaries;
+      // Corporate tax, with losses carried forward against future profit.
+      if (day.pretax > 0) {
+        const offset = Math.min(S.taxLossCarry || 0, day.pretax);
+        S.taxLossCarry = (S.taxLossCarry || 0) - offset;
+        day.tax = (day.pretax - offset) * this.taxRate();
+        S.cash -= day.tax;
+        S.stats.taxPaid = (S.stats.taxPaid || 0) + day.tax;
+      } else {
+        S.taxLossCarry = (S.taxLossCarry || 0) - day.pretax;
+      }
+      day.profit = day.pretax - day.tax;
+      // push the tax back onto each business so the ledger reconciles
+      let profitable = 0;
+      for (const b of S.businesses) if (b.last.pretax > 0) profitable += b.last.pretax;
+      for (const b of S.businesses) {
+        b.last.tax = profitable > 0 && b.last.pretax > 0 ? day.tax * (b.last.pretax / profitable) : 0;
+        b.last.net = b.last.pretax - b.last.tax;
+        b.history.push(b.last.net); if (b.history.length > 60) b.history.shift();
+      }
       // 4. market dynamics
       this._updateMarket(fx);
       // 5. events
@@ -602,21 +715,24 @@
           // never spend the last of the cash on auto-restock: keep a reserve of one day of wages & rent company-wide
           const reserve = this._dailyFixedCosts(fx);
           const spendable = S.cash - reserve;
-          const unit = this.buyCost(pid);
+          const unit = this.buyCost(pid, biz);
           const qty = Math.min(need, Math.floor(spendable / unit));
           if (qty > 0) this.buyInventory(biz.id, pid, qty, true);
         }
       }
     }
     _dailyFixedCosts(fx) {
-      let c = 0;
-      for (const b of this.S.businesses) c += BUSINESS_TYPES[b.type].rent + b.staff * this.dailyWage(b, fx) + b.marketing;
+      let c = this.hqUpkeep();
+      for (const b of this.S.businesses) {
+        c += BUSINESS_TYPES[b.type].rent + b.staff * this.dailyWage(b, fx) + b.marketing + this.bizOverhead(b) + this.bizUpkeep(b);
+      }
       return c;
     }
 
     _simulateBusiness(biz, fx, day) {
       const S = this.S, T = BUSINESS_TYPES[biz.type];
-      const last = { revenue: 0, cogs: 0, wages: 0, rent: T.rent, marketing: biz.marketing, profit: 0, sold: {}, expected: {}, lostStock: 0, lostStaff: 0, serviceRatio: 1, units: 0, spoiled: 0, demandUnits: 0 };
+      const last = { revenue: 0, cogs: 0, wages: 0, rent: T.rent, marketing: biz.marketing, overhead: this.bizOverhead(biz), upkeep: this.bizUpkeep(biz),
+        pretax: 0, tax: 0, net: 0, profit: 0, sold: {}, expected: {}, lostStock: 0, lostStaff: 0, serviceRatio: 1, units: 0, spoiled: 0, demandUnits: 0 };
       // expected demand per product
       let total = 0, ratioSum = 0;
       for (const pid of T.products) {
@@ -647,14 +763,15 @@
         last.lostStock += Math.max(0, units - sold);
         // spoilage
         if (PRODUCTS[pid].perishable && biz.stock[pid] > 0) {
-          const spoiled = stochRound(biz.stock[pid] * 0.03);
+          const spoiled = stochRound(biz.stock[pid] * ECONOMY.spoilRate * this.bizEffMul(biz, 'spoilMult'));
           if (spoiled > 0) { biz.stock[pid] -= spoiled; last.spoiled += spoiled * biz.avgCost[pid]; }
         }
       }
       last.lostStaff = total - total * service;
       last.demandUnits = total;
       last.wages = biz.staff * this.dailyWage(biz, fx);
-      last.profit = last.revenue - last.cogs - last.wages - last.rent - last.marketing - last.spoiled;
+      last.pretax = last.revenue - last.cogs - last.wages - last.rent - last.marketing - last.spoiled - last.overhead - last.upkeep;
+      last.profit = last.pretax;   // tax is allocated once the company total is known
       // reputation dynamics
       const stockoutFrac = unitsWanted > 0 ? last.lostStock / unitsWanted : 0;
       const staffFrac = 1 - service;
@@ -663,12 +780,13 @@
       if (avgRatio > 1.4) delta -= (avgRatio - 1.4) * 2;
       if (avgRatio < 0.9) delta += 0.3;
       if (biz.staff === 0) delta -= 0.5;
-      biz.rep = clamp(biz.rep + delta, 0, 100);
+      biz.rep = clamp(biz.rep + delta, this.repFloor(biz), 100);
       // apply to company
-      S.cash += last.revenue - last.wages - last.rent - last.marketing;
-      day.revenue += last.revenue; day.cogs += last.cogs; day.wages += last.wages; day.rent += last.rent; day.marketing += last.marketing; day.units += last.units; day.spoilage += last.spoiled;
+      S.cash += last.revenue - last.wages - last.rent - last.marketing - last.overhead - last.upkeep;
+      day.revenue += last.revenue; day.cogs += last.cogs; day.wages += last.wages; day.rent += last.rent;
+      day.marketing += last.marketing; day.overhead += last.overhead; day.upkeep += last.upkeep;
+      day.units += last.units; day.spoilage += last.spoiled;
       biz.last = last;
-      biz.history.push(last.profit); if (biz.history.length > 60) biz.history.shift();
     }
 
     _updateMarket(fx) {
@@ -806,7 +924,7 @@
       S.jitter = clamp(S.jitter * 0.7 + gauss() * 0.008, -0.04, 0.04);
       const growth = clamp((S.ema7 - S.ema30) / Math.max(Math.abs(S.ema30), 50), -0.5, 1.0);
       const streakBonus = 1 + Math.min(0.1, S.streak / 300);
-      S.multiple = 100 * S.sentiment * (1 + 0.5 * growth) * (1 + 0.1 * S.hq.ir) * streakBonus;
+      S.multiple = 95 * S.sentiment * (1 + 0.5 * growth) * (1 + this.hqEff('multiple')) * streakBonus;
       S.goodwill = Math.max(0, S.ema30) * S.multiple;
       S.netAssets = net;
       S.valuation = Math.max(0, (net + S.goodwill) * (1 + S.jitter));
@@ -845,7 +963,7 @@
     // ---------- quests -----------------------------------------------------------------
     _questScaleReward(frac) {
       const S = this.S;
-      const base = Math.max(400, S.valuation * 0.05, Math.max(0, S.ema30) * 15);
+      const base = Math.max(300, S.valuation * 0.006, Math.max(0, S.ema30) * 5);
       return Math.max(100, niceRound(base * frac));
     }
     _generateQuest() {
@@ -940,7 +1058,11 @@
         const byId = {}; for (const c of (s.competitors || [])) byId[c.id] = c;
         s.competitors = COMPETITORS.map(def => byId[def.id] || { id: def.id, value: def.value * rnd(0.8, 1.25), history: [def.value], acquired: false, strength: 1, lastRank: 0 });
         for (const c of s.competitors) { if (!Array.isArray(c.history)) c.history = [c.value]; if (typeof c.strength !== 'number') c.strength = 1; }
-        s.hq = s.hq || {}; for (const k in HQ_UPGRADES) if (s.hq[k] == null) s.hq[k] = 0;
+        s.hq = s.hq || {};
+        if (s.hq.logistics != null && s.hq.procurement == null) s.hq.procurement = s.hq.logistics;  // renamed department
+        for (const k in HQ_UPGRADES) if (!Number.isFinite(s.hq[k])) s.hq[k] = 0;
+        for (const k in s.hq) if (!HQ_UPGRADES[k]) delete s.hq[k];
+        if (!Number.isFinite(s.taxLossCarry)) s.taxLossCarry = 0;
         for (const pid in PRODUCTS) {
           if (!s.market[pid]) s.market[pid] = { cost: PRODUCTS[pid].cost, supply: 1, demand: 1, history: [PRODUCTS[pid].cost] };
           const m = s.market[pid];
@@ -950,7 +1072,9 @@
         }
         s.businesses = s.businesses.filter(b => b && BUSINESS_TYPES[b.type]);
         for (const b of s.businesses) {
-          b.upgrades = b.upgrades || {}; for (const uid in UPGRADES) if (b.upgrades[uid] == null) b.upgrades[uid] = 0;
+          b.upgrades = b.upgrades || {};
+          for (const uid in UPGRADES) b.upgrades[uid] = clamp(Math.floor(b.upgrades[uid] || 0), 0, UPGRADES[uid].max);
+          for (const uid in b.upgrades) if (!UPGRADES[uid]) delete b.upgrades[uid];
           b.stock = b.stock || {}; b.avgCost = b.avgCost || {}; b.prices = b.prices || {};
           if (!b.last) b.last = { revenue: 0, cogs: 0, wages: 0, rent: 0, marketing: 0, profit: 0, sold: {}, expected: {}, lostStock: 0, lostStaff: 0, serviceRatio: 1, units: 0, spoiled: 0 };
           b.last.sold = b.last.sold || {}; b.last.expected = b.last.expected || {};
@@ -974,6 +1098,21 @@
         for (const k of ['achievements', 'unlocked', 'portfolio']) if (!s[k] || typeof s[k] !== 'object') s[k] = {};
         for (const k of ['sentiment', 'jitter', 'valuation', 'sharePrice', 'netAssets', 'goodwill', 'multiple', 'ema7', 'ema30', 'streak', 'overdraftDays', 'questCooldown', 'rank', 'nextBizId', 'nextLoanId', 'day', 'cash']) if (typeof s[k] !== 'number' || !isFinite(s[k])) s[k] = F[k];
         if (!(s.difficulty in DIFFICULTY)) s.difficulty = 'normal';
+        // Saves from before the tax/overhead/upkeep economy never budgeted for the new
+        // daily bills. Hand over a restructuring grant so an old company is not killed
+        // the moment it loads.
+        if (s.econ !== 2) {
+          s.econ = 2;
+          this.S = s;
+          let daily = this.hqUpkeep();
+          for (const b of s.businesses) daily += this.bizUpkeep(b) + this.bizOverhead(b);
+          const grant = Math.round(daily * 45);
+          if (grant > 0) {
+            s.cash += grant;
+            s.eventLog.unshift({ day: s.day, icon: '🏛️', kind: 'good',
+              text: `The economy has changed: corporate tax, head-office overhead and upgrade upkeep are now charged daily. A one-off restructuring grant of ${this.fmt(grant)} covers your first 45 days.` });
+          }
+        }
         if (s.events.pending && !EVENTS.find(e => e.id === s.events.pending.id)) s.events.pending = null;
         s.events.active = (s.events.active || []).filter(ev => ev && EVENTS.find(e => e.id === ev.id));
         this.S = s;

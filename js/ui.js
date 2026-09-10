@@ -7,7 +7,7 @@
   const I = root.MM_ICONS || (() => '');
   const isSvg = v => typeof v === 'string' && v.charAt(0) === '<';
   const emo = v => isSvg(v) ? v : `<span class="emo">${v}</span>`;
-  const { PRODUCTS, BUSINESS_TYPES, TYPE_ORDER, UPGRADES, HQ_UPGRADES, COMPETITORS, CATEGORIES, ACHIEVEMENTS, TIPS, DIFFICULTY } = D;
+  const { PRODUCTS, BUSINESS_TYPES, TYPE_ORDER, UPGRADES, UPGRADE_BRANCHES, HQ_UPGRADES, HQ_DEPTS, COMPETITORS, CATEGORIES, ACHIEVEMENTS, TIPS, DIFFICULTY } = D;
   const $ = (sel, el = document) => el.querySelector(sel);
   const $$ = (sel, el = document) => Array.from(el.querySelectorAll(sel));
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -184,6 +184,7 @@
   // ============================================================================
   const UI = {
     view: 'dashboard', detailBiz: null, rivalsTab: 'leaderboard', marketMine: true, chartRange: 90, chartLog: false,
+    ledgerSort: { key: 'net', dir: -1 }, ledgerDay: -1,
     lastRefresh: 0, lastChart: 0, structKey: '', mountedView: '', navDots: {}, restockDays: 3, tipIndex: 0, lastTipDay: -100,
 
     // Replaces [data-icon] placeholders with inline SVG (keeps markup readable).
@@ -307,7 +308,7 @@
     computeStructKey() {
       const S = G.S;
       return [UI.view, UI.detailBiz, UI.rivalsTab, UI.marketMine, S.businesses.map(b => b.id + ':' + b.staff + ':' + Object.values(b.upgrades).join('')).join(','), S.loans.map(l => l.id).join(','),
-        S.events.active.map(e => e.id).join(','), Object.values(S.hq).join(''), Object.keys(S.portfolio).join(','), S.competitors.filter(c => c.acquired).length,
+        S.events.active.map(e => e.id).join(','), Object.values(S.hq).join(''), UI.ledgerSort.key + UI.ledgerSort.dir, Object.keys(S.portfolio).join(','), S.competitors.filter(c => c.acquired).length,
         Object.keys(S.unlocked).length, S.quests.map(q => q.tid + (q.done ? 'd' : '')).join(','), S.cash < 0, S.flags.won, Object.keys(S.achievements).length].join('|');
     },
     render(force, inputFocused) {
@@ -324,6 +325,7 @@
       switch (UI.view) {
         case 'dashboard': v.innerHTML = UI.htmlDashboard(); break;
         case 'businesses': v.innerHTML = UI.detailBiz && G.biz(UI.detailBiz) ? UI.htmlBizDetail(G.biz(UI.detailBiz)) : UI.htmlBusinesses(); break;
+        case 'ledger': v.innerHTML = UI.htmlLedger(); break;
         case 'market': v.innerHTML = UI.htmlMarket(); break;
         case 'bank': v.innerHTML = UI.htmlBank(); break;
         case 'hq': v.innerHTML = UI.htmlHQ(); break;
@@ -339,6 +341,7 @@
       switch (UI.view) {
         case 'dashboard': UI.refreshDashboard(); break;
         case 'businesses': UI.detailBiz ? UI.refreshBizDetail() : UI.refreshBusinesses(); break;
+        case 'ledger': UI.refreshLedger(); break;
         case 'market': UI.refreshMarket(); break;
         case 'bank': UI.refreshBank(); break;
         case 'hq': UI.refreshHQ(); break;
@@ -418,16 +421,22 @@
       setHtml('#sentimentLbl', `Sentiment <span class="badge ${sent >= 1.05 ? 'good' : sent <= 0.95 ? 'bad' : ''}">${sent >= 1.15 ? 'Euphoric' : sent >= 1.05 ? 'Optimistic' : sent <= 0.85 ? 'Panicked' : sent <= 0.95 ? 'Nervous' : 'Neutral'}</span>`);
       // P&L
       const L = S.lastDay;
-      const rows = [['Revenue', L.revenue, 'good'], ['Cost of goods', -L.cogs], ['Wages', -L.wages], ['Rent', -L.rent], ['Marketing', -L.marketing], ['Interest', -L.interest], ['Spoilage', -(L.spoilage || 0)], ['Subsidiaries', L.subsidiaries || 0, 'good']].filter(r => r[1] !== 0 || r[0] === 'Revenue');
-      setHtml('#plBox', rows.map(r => `<div class="pl-row"><span>${r[0]}</span><span class="mono ${r[1] < 0 ? 'muted' : r[2] || ''}">${fmt(r[1])}</span></div>`).join('') + `<div class="pl-row total"><span>Net profit</span><span class="mono ${L.profit >= 0 ? 'good' : 'bad'}">${fmt(L.profit)}</span></div>` + (L.other ? `<div class="pl-row"><span class="muted">One-off cash (events, rewards)</span><span class="mono ${L.other >= 0 ? 'gold' : 'bad'}">${sign(L.other)}${fmt(L.other)}</span></div>` : ''));
+      const rows = [['Revenue', L.revenue, 'good'], ['Cost of goods', -L.cogs], ['Spoilage', -(L.spoilage || 0)], ['Wages', -L.wages], ['Rent', -L.rent], ['Marketing', -L.marketing],
+        ['Corporate overhead', -(L.overhead || 0)], ['Upgrade upkeep', -((L.upkeep || 0) + (L.hqUpkeep || 0))], ['Interest', -L.interest], ['Subsidiaries', L.subsidiaries || 0, 'good']]
+        .filter(r => r[1] !== 0 || r[0] === 'Revenue');
+      setHtml('#plBox', rows.map(r => `<div class="pl-row"><span>${r[0]}</span><span class="mono ${r[1] < 0 ? 'muted' : r[2] || ''}">${fmt(r[1])}</span></div>`).join('')
+        + `<div class="pl-row"><span>Profit before tax</span><span class="mono ${L.pretax >= 0 ? '' : 'bad'}">${fmt(L.pretax || 0)}</span></div>`
+        + `<div class="pl-row"><span>Corporate tax <span class="badge bad">${pct(G.taxRate(), 0)}</span></span><span class="mono muted">${fmt(-(L.tax || 0))}</span></div>`
+        + `<div class="pl-row total"><span>Net profit</span><span class="mono ${L.profit >= 0 ? 'good' : 'bad'}">${fmt(L.profit)}</span></div>`
+        + (L.other ? `<div class="pl-row"><span class="muted">One-off cash (events, rewards)</span><span class="mono ${L.other >= 0 ? 'gold' : 'bad'}">${sign(L.other)}${fmt(L.other)}</span></div>` : ''));
       // events
       const ev = S.events.active;
       setHtml('#eventsBox', (ev.length ? ev.map(e => `<div class="chip ${e.kind === 'bad' ? 'bad' : e.kind === 'good' ? 'good' : ''}" style="margin:0 6px 6px 0">${e.icon} ${esc(e.title)} <span class="days">${e.days}d left</span></div>`).join('') : '<div class="muted small">Calm markets. Enjoy it while it lasts.</div>') +
         `<div class="divider"></div><div class="kv"><span>Interest rate</span><span class="v">${(G.currentRate() * 100).toFixed(2)}%/day</span></div><div class="kv"><span>Competition pressure</span><span class="v">${pct(1 - G.competitionFactor('corner', G.activeEffects()))}</span></div><div class="kv"><span>Events seen</span><span class="v">${S.stats.eventsSeen}</span></div>`);
       // empire
       const staff = G.totalStaff();
-      setHtml('#empireBox', `<div class="kv"><span>Businesses</span><span class="v">${S.businesses.length}</span></div><div class="kv"><span>Employees</span><span class="v">${staff}</span></div><div class="kv"><span>Subsidiaries</span><span class="v">${S.subsidiaries.length}</span></div><div class="kv"><span>Stock portfolio</span><span class="v">${fmt(G.portfolioValue())}</span></div><div class="kv"><span>Best streak</span><span class="v">${S.stats.bestStreak} days</span></div><div class="kv"><span>Achievements</span><span class="v">${Object.keys(S.achievements).length}/${ACHIEVEMENTS.length}</span></div>
-        <div class="row" style="margin-top:12px"><button class="btn sm primary" data-action="view" data-view="businesses">${I('store', 16)}Manage businesses</button><button class="btn sm" data-action="view" data-view="rivals">${I('rivals', 16)}Rivals</button></div>`);
+      setHtml('#empireBox', `<div class="kv"><span>Businesses</span><span class="v">${S.businesses.length}</span></div><div class="kv"><span>Employees</span><span class="v">${staff}</span></div><div class="kv"><span>Subsidiaries</span><span class="v">${S.subsidiaries.length}</span></div><div class="kv"><span>Stock portfolio</span><span class="v">${fmt(G.portfolioValue())}</span></div><div class="kv"><span>Tax rate</span><span class="v">${pct(G.taxRate(), 0)}</span></div><div class="kv"><span>Overhead</span><span class="v">${pct(G.overheadRate(), 0)} of rent</span></div><div class="kv"><span>Daily upkeep</span><span class="v">${fmt(G.hqUpkeep() + S.businesses.reduce((a, b) => a + G.bizUpkeep(b), 0))}</span></div><div class="kv"><span>Achievements</span><span class="v">${Object.keys(S.achievements).length}/${ACHIEVEMENTS.length}</span></div>
+        <div class="row" style="margin-top:12px"><button class="btn sm primary" data-action="view" data-view="businesses">${I('store', 16)}Manage businesses</button><button class="btn sm" data-action="view" data-view="ledger">${I('chart-bar', 16)}Ledger</button></div>`);
       UI.refreshTip();
     },
     refreshTip() {
@@ -436,7 +445,9 @@
       const b0 = S.businesses[0];
       if (S.day < 3 && b0) tip = `Welcome, ${S.company}! Your Corner Store has 2 days of stock. Open <b>Businesses → ${esc(b0.name)}</b> to restock, set prices and hire.`;
       else if (S.businesses.some(b => Object.values(b.stock).every(v => v === 0)) && S.day < 20) tip = 'A store has empty shelves! Restock it or switch on <b>auto-restock</b> so it never runs dry.';
-      else if (S.day < 12 && S.stats.loansTaken === 0) tip = 'Growth needs capital. The <b>Bank</b> will lend you money — a second store pays back a loan in a few weeks.';
+      else if (S.day < 12 && S.stats.loansTaken === 0) tip = 'Growth needs capital. The <b>Bank</b> lends against your assets — borrow only when the return beats the interest.';
+      else if (S.day > 25 && S.businesses.length > 2 && S.stats.upgradesBought === 0) tip = 'Upgrades come in branches, and each level costs daily <b>upkeep</b>. Open a business and start with <b>Capacity</b> or <b>Operations</b>.';
+      else if (S.day > 40 && S.lastDay.tax > 0 && Math.random() < 0.5) tip = `You paid <b>${fmt(S.lastDay.tax)}</b> in corporate tax yesterday. <b>Finance → Tax Strategy</b> at HQ cuts the rate.`;
       else if (S.businesses.length === 1 && S.day > 15) tip = 'Expand! Open a second business from <b>Businesses → Expand your empire</b>. Each store adds profit and company value.';
       else {
         if (S.day - UI.lastTipDay >= 15) { UI.lastTipDay = S.day; UI.tipIndex = (UI.tipIndex + 1) % TIPS.length; }
@@ -536,7 +547,14 @@
         <div class="row"><span class="badge">${T.name}</span><button class="btn sm danger" data-action="sellBiz" data-id="${b.id}">${I('tag', 15)}Sell for <span data-f="salevalue"></span></button></div></div>
         <div class="grid cols-3">
           <div class="card"><h3>Reputation</h3><div class="row"><span class="big-num" data-f="rep"></span><span class="muted small" data-f="repnote"></span></div><div class="bar" style="margin-top:6px"><div class="fill" data-f="repbar"></div></div><div class="small muted" style="margin-top:6px">Reputation multiplies foot traffic (×<span data-f="repmult"></span>). Stockouts, understaffing and price gouging hurt it.</div></div>
-          <div class="card"><h3>Yesterday</h3><div class="pl-row"><span>Revenue</span><span class="mono good" data-f="rev"></span></div><div class="pl-row"><span>Cost of goods</span><span class="mono muted" data-f="cogs"></span></div><div class="pl-row"><span>Wages</span><span class="mono muted" data-f="wages"></span></div><div class="pl-row"><span>Rent + marketing</span><span class="mono muted" data-f="rentmk"></span></div><div class="pl-row total"><span>Profit</span><span class="mono" data-f="profit"></span></div></div>
+          <div class="card"><h3>Yesterday</h3>
+            <div class="pl-row"><span>Revenue</span><span class="mono good" data-f="rev"></span></div>
+            <div class="pl-row"><span>Cost of goods</span><span class="mono muted" data-f="cogs"></span></div>
+            <div class="pl-row"><span>Wages</span><span class="mono muted" data-f="wages"></span></div>
+            <div class="pl-row"><span>Rent + marketing</span><span class="mono muted" data-f="rentmk"></span></div>
+            <div class="pl-row"><span>Overhead + upkeep</span><span class="mono muted" data-f="ohup"></span></div>
+            <div class="pl-row"><span>Tax share</span><span class="mono muted" data-f="btax"></span></div>
+            <div class="pl-row total"><span>Net</span><span class="mono" data-f="profit"></span></div></div>
           <div class="card"><h3>Profit (30 days)</h3><div class="chart-wrap"><canvas id="bizChart" height="140"></canvas></div></div>
         </div>
         <div class="card section">
@@ -565,9 +583,28 @@
             <div class="row between"><div><b>Smart pricing</b><div class="small muted">${S.hq.analytics ? 'Re-prices products daily to the suggested price.' : 'Requires the Analytics Suite (HQ Upgrades).'}</div></div><div class="toggle ${b.autoPrice ? 'on' : ''} ${S.hq.analytics ? '' : 'disabled'}" data-action="toggleAutoPrice" data-id="${b.id}"></div></div>
           </div>
         </div>
-        <div class="card section"><h3>Upgrades</h3>
-          ${Object.keys(UPGRADES).map(uid => { const U = UPGRADES[uid], lvl = b.upgrades[uid], cost = G.upgradeCost(b, uid); return `<div class="upgrade-row ${cost === null ? 'maxed' : ''}"><div class="ico">${U.icon}</div><div class="info"><b>${U.name} ${levelDots(lvl, U.max)}</b><span>${U.desc}</span></div>${cost === null ? '<span class="badge gold">MAX</span>' : `<button class="btn sm ${S.cash >= cost ? 'primary' : ''}" data-action="upgrade" data-id="${b.id}" data-uid="${uid}" data-f="upg-${uid}">${fmt(cost)}</button>`}</div>`; }).join('')}
+        <div class="card section"><div class="row between"><h3>Upgrades</h3><span class="badge">${I('clock', 12)}Upkeep <b data-f="bizupkeep"></b>/day</span></div>
+          ${Object.keys(UPGRADE_BRANCHES).map(br => UI.htmlBranch(b, br)).join('')}
         </div>`;
+    },
+    htmlBranch(b, br) {
+      const S = G.S, B = UPGRADE_BRANCHES[br];
+      const ids = Object.keys(UPGRADES).filter(u => UPGRADES[u].branch === br).sort((x, y) => UPGRADES[x].tier - UPGRADES[y].tier);
+      return `<div class="branch">
+        <div class="branch-head"><span class="emo">${B.icon}</span><div><b>${B.name}</b><span class="muted small">${B.desc}</span></div></div>
+        ${ids.map(uid => {
+          const U = UPGRADES[uid], lvl = b.upgrades[uid] || 0, cost = G.upgradeCost(b, uid), lock = G.upgradeLock(b, uid);
+          const upkeep = cost === null ? 0 : cost * U.upkeep;
+          return `<div class="upgrade-row ${cost === null ? 'maxed' : ''} ${lock ? 'locked' : ''}">
+            <div class="ico">${U.icon}</div>
+            <div class="info"><b>${U.name} ${levelDots(lvl, U.max)}</b><span>${U.desc}</span>
+              ${lock ? `<span class="lockline">${I('lock', 11)}${esc(lock)}</span>` : cost === null ? '' : `<span class="lockline muted">${I('clock', 11)}Adds ${fmt(upkeep)}/day upkeep</span>`}</div>
+            ${cost === null ? '<span class="badge gold">MAX</span>'
+              : lock ? `<span class="badge">${I('lock', 12)}Locked</span>`
+              : `<button class="btn sm ${S.cash >= cost ? 'primary' : ''}" data-action="upgrade" data-id="${b.id}" data-uid="${uid}" data-f="upg-${uid}">${fmt(cost)}</button>`}
+          </div>`;
+        }).join('')}
+      </div>`;
     },
     htmlProductRow(b, pid) {
       const p = PRODUCTS[pid];
@@ -590,8 +627,9 @@
       const rb = $('[data-f="repbar"]'); rb.style.width = b.rep + '%'; rb.className = 'fill ' + (b.rep >= 70 ? 'green' : b.rep >= 40 ? 'gold' : 'red');
       setText('[data-f="repmult"]', G.repFactor(b.rep).toFixed(2));
       const L = b.last;
-      setText('[data-f="rev"]', fmt(L.revenue)); setText('[data-f="cogs"]', fmt(-L.cogs)); setText('[data-f="wages"]', fmt(-L.wages)); setText('[data-f="rentmk"]', fmt(-(L.rent + L.marketing)));
-      const pr = $('[data-f="profit"]'); pr.textContent = fmt(L.profit); pr.className = 'mono ' + (L.profit >= 0 ? 'good' : 'bad');
+      setText('[data-f="rev"]', fmt(L.revenue)); setText('[data-f="cogs"]', fmt(-(L.cogs + L.spoiled))); setText('[data-f="wages"]', fmt(-L.wages)); setText('[data-f="rentmk"]', fmt(-(L.rent + L.marketing)));
+      setText('[data-f="ohup"]', fmt(-(L.overhead + L.upkeep))); setText('[data-f="btax"]', fmt(-L.tax));
+      const pr = $('[data-f="profit"]'); pr.textContent = fmt(L.net); pr.className = 'mono ' + (L.net >= 0 ? 'good' : 'bad');
       // products
       let totalExp = 0;
       for (const pid of T.products) {
@@ -627,7 +665,95 @@
       setText('[data-f="wagelbl"]', `${Math.round(b.wageMult * 100)}% of market (${fmt(G.dailyWage(b, fx))}/day)`);
       setText('[data-f="morale"]', moraleLabel(b.wageMult)); setText('[data-f="prod"]', G.productivity(b, fx).toFixed(2));
       setText('[data-f="mklbl"]', fmt(b.marketing)); setText('[data-f="mkboost"]', `+${((G.marketingFactor(b) - 1) * 100).toFixed(0)}% traffic`);
+      setText('[data-f="bizupkeep"]', fmt(G.bizUpkeep(b)));
       for (const uid in UPGRADES) { const btn = $(`[data-f="upg-${uid}"]`); if (btn) { const c = G.upgradeCost(b, uid); btn.disabled = c === null || S.cash < c; btn.classList.toggle('primary', c !== null && S.cash >= c); } }
+    },
+
+    // ============================================================================
+    // LEDGER — per-business profit and loss
+    // ============================================================================
+    htmlLedger() {
+      const S = G.S;
+      const cols = [
+        ['name', 'Business', false], ['revenue', 'Revenue', true], ['cogs', 'Goods', true], ['wages', 'Wages', true],
+        ['fixed', 'Fixed', true], ['overhead', 'Admin', true], ['upkeep', 'Upkeep', true], ['tax', 'Tax', true],
+        ['net', 'Net / day', true], ['margin', 'Margin', true], ['roi', 'ROI', true],
+      ];
+      return `<div class="view-title"><div><h1>Ledger</h1><div class="sub">Yesterday's profit and loss for every business you own. Overhead and tax are shared out by size, so the rows add up to the company total.</div></div>
+        <div class="row"><span class="badge">${I('scale', 12)}Tax rate <b data-f="taxrate"></b></span><span class="badge">${I('building', 12)}Overhead <b data-f="ohrate"></b> of rent</span></div></div>
+        <div class="card"><div class="table-wrap"><table class="table ledger"><thead><tr>
+          ${cols.map(c => `<th class="${c[2] ? 'num' : ''} sortable" data-action="ledgerSort" data-key="${c[0]}">${c[1]}<span data-sort="${c[0]}"></span></th>`).join('')}
+        </tr></thead><tbody id="ledgerBody"></tbody>
+        <tfoot id="ledgerFoot"></tfoot></table></div>
+        ${S.businesses.length ? '' : '<div class="empty">No businesses yet.</div>'}</div>
+        <div class="grid cols-3 section">
+          <div class="card"><h3>Company costs</h3><div id="ledgerCompany"></div></div>
+          <div class="card"><h3>Where the money goes</h3><div id="ledgerSplit"></div></div>
+          <div class="card"><h3>Best and worst</h3><div id="ledgerBest"></div></div>
+        </div>`;
+    },
+    ledgerRows() {
+      const S = G.S;
+      return S.businesses.map(b => {
+        const L = b.last, T = BUSINESS_TYPES[b.type];
+        const gross = L.revenue - L.cogs - L.spoiled;
+        const invested = b.paid + b.upgradesPaid;
+        return {
+          id: b.id, name: b.name, icon: T.icon, type: T.name,
+          revenue: L.revenue, cogs: L.cogs + L.spoiled, gross, wages: L.wages, fixed: L.rent + L.marketing,
+          overhead: L.overhead, upkeep: L.upkeep, tax: L.tax, net: L.net,
+          margin: L.revenue > 0 ? L.net / L.revenue : 0,
+          roi: invested > 0 ? (G.bizProfitEstimate(b) * 360) / invested : 0,
+        };
+      });
+    },
+    refreshLedger() {
+      const S = G.S;
+      setText('[data-f="taxrate"]', pct(G.taxRate(), 0));
+      setText('[data-f="ohrate"]', pct(G.overheadRate(), 0));
+      const sort = UI.ledgerSort;
+      if (UI.ledgerDay === S.day && UI.ledgerKey === sort.key + sort.dir) return;
+      UI.ledgerDay = S.day; UI.ledgerKey = sort.key + sort.dir;
+      const rows = UI.ledgerRows();
+      rows.sort((a, b) => sort.key === 'name' ? a.name.localeCompare(b.name) * -sort.dir : (a[sort.key] - b[sort.key]) * sort.dir);
+      const money = v => fmt(v);
+      const body = $('#ledgerBody');
+      if (body) body.innerHTML = rows.map(r => `<tr data-action="openBiz" data-id="${r.id}" style="cursor:pointer">
+        <td><div class="lname"><span class="emo">${r.icon}</span><span><b>${esc(r.name)}</b><span class="muted small">${r.type}</span></span></div></td>
+        <td class="num">${money(r.revenue)}</td><td class="num muted">${money(-r.cogs)}</td>
+        <td class="num muted">${money(-r.wages)}</td><td class="num muted">${money(-r.fixed)}</td>
+        <td class="num muted">${money(-r.overhead)}</td><td class="num muted">${money(-r.upkeep)}</td><td class="num muted">${money(-r.tax)}</td>
+        <td class="num ${r.net >= 0 ? 'good' : 'bad'}"><b>${money(r.net)}</b></td>
+        <td class="num ${r.margin >= 0.15 ? 'good' : r.margin < 0 ? 'bad' : ''}">${pct(r.margin, 0)}</td>
+        <td class="num ${r.roi >= 0.5 ? 'good' : r.roi < 0 ? 'bad' : ''}">${pct(r.roi, 0)}</td></tr>`).join('');
+      const sum = k => rows.reduce((a, r) => a + r[k], 0);
+      const foot = $('#ledgerFoot');
+      if (foot) foot.innerHTML = `<tr><td><b>All businesses</b></td><td class="num">${money(sum('revenue'))}</td><td class="num muted">${money(-sum('cogs'))}</td>
+        <td class="num muted">${money(-sum('wages'))}</td><td class="num muted">${money(-sum('fixed'))}</td>
+        <td class="num muted">${money(-sum('overhead'))}</td><td class="num muted">${money(-sum('upkeep'))}</td><td class="num muted">${money(-sum('tax'))}</td>
+        <td class="num ${sum('net') >= 0 ? 'good' : 'bad'}"><b>${money(sum('net'))}</b></td>
+        <td class="num">${pct(sum('revenue') > 0 ? sum('net') / sum('revenue') : 0, 0)}</td><td></td></tr>`;
+      $$('[data-sort]').forEach(el => { el.textContent = el.dataset.sort === sort.key ? (sort.dir < 0 ? ' ↓' : ' ↑') : ''; });
+      const L = S.lastDay;
+      setHtml('#ledgerCompany', `<div class="kv"><span>Businesses (net)</span><span class="v ${sum('net') >= 0 ? 'good' : 'bad'}">${money(sum('net'))}</span></div>
+        <div class="kv"><span>Head office upkeep</span><span class="v">${fmt(-L.hqUpkeep)}</span></div>
+        <div class="kv"><span>Loan interest</span><span class="v">${fmt(-L.interest)}</span></div>
+        <div class="kv"><span>Subsidiaries</span><span class="v good">${fmt(L.subsidiaries)}</span></div>
+        <div class="kv"><span>Profit before tax</span><span class="v">${fmt(L.pretax)}</span></div>
+        <div class="kv"><span>Corporate tax</span><span class="v bad">${fmt(-L.tax)}</span></div>
+        <div class="kv"><span><b>Net profit</b></span><span class="v ${L.profit >= 0 ? 'good' : 'bad'}"><b>${fmt(L.profit)}</b></span></div>
+        ${S.taxLossCarry > 1 ? `<div class="kv"><span>Losses carried forward</span><span class="v">${fmt(S.taxLossCarry)}</span></div>` : ''}`);
+      const parts = [['Cost of goods', sum('cogs'), 'var(--blue)'], ['Wages', sum('wages'), 'var(--violet)'], ['Rent + marketing', sum('fixed'), 'var(--amber)'],
+        ['Overhead', sum('overhead'), '#ff9f6b'], ['Upkeep', sum('upkeep') + L.hqUpkeep, '#6bd0ff'], ['Interest', L.interest, '#c08cff'], ['Tax', sum('tax'), 'var(--rose)']];
+      const rev = Math.max(1, sum('revenue'));
+      setHtml('#ledgerSplit', parts.map(([n, v, c]) => `<div class="kv"><span>${n}</span><span class="v">${pct(v / rev, 1)}</span></div>
+        <div class="bar" style="margin:-2px 0 8px"><div class="fill" style="width:${clamp(v / rev * 100, 0, 100)}%;background:${c}"></div></div>`).join('')
+        + `<div class="kv"><span><b>Kept as profit</b></span><span class="v ${L.profit >= 0 ? 'good' : 'bad'}"><b>${pct(L.profit / rev, 1)}</b></span></div>`);
+      const byNet = [...rows].sort((a, b) => b.net - a.net);
+      setHtml('#ledgerBest', rows.length ? `<div class="kv"><span>${byNet[0].icon} ${esc(byNet[0].name)}</span><span class="v good">${money(byNet[0].net)}</span></div>
+        <div class="kv"><span>${byNet[byNet.length - 1].icon} ${esc(byNet[byNet.length - 1].name)}</span><span class="v ${byNet[byNet.length - 1].net >= 0 ? '' : 'bad'}">${money(byNet[byNet.length - 1].net)}</span></div>
+        <div class="divider"></div>${[...rows].sort((a, b) => b.roi - a.roi).slice(0, 3).map(r => `<div class="kv"><span>${r.icon} ${esc(r.name)}</span><span class="v">${pct(r.roi, 0)} ROI</span></div>`).join('')}`
+        : '<div class="muted small">Nothing to report yet.</div>');
     },
 
     // ============================================================================
@@ -701,8 +827,26 @@
     // ============================================================================
     htmlHQ() {
       const S = G.S;
-      return `<div class="view-title"><div><h1>Headquarters</h1><div class="sub">Company-wide upgrades that boost every business you own.</div></div></div>
-        <div class="grid auto">${Object.keys(HQ_UPGRADES).map(id => { const Hq = HQ_UPGRADES[id], lvl = S.hq[id], cost = G.hqCost(id); return `<div class="card upgrade-card ${cost === null ? 'maxed' : ''}" id="hq-${id}"><div class="row"><span style="font-size:30px">${Hq.icon}</span><div><b>${Hq.name}</b><div class="small muted">Level ${lvl}/${Hq.max}</div></div></div><div class="small" style="margin:8px 0">${Hq.desc}</div>${levelDots(lvl, Hq.max)}<div style="margin-top:10px">${cost === null ? '<span class="badge gold">MAX LEVEL</span>' : `<button class="btn sm primary block" data-action="hq" data-id="${id}" data-f="btn">Upgrade · ${fmt(cost)}</button>`}</div></div>`; }).join('')}</div>
+      return `<div class="view-title"><div><h1>Headquarters</h1><div class="sub">Company-wide departments. Later tiers unlock behind earlier ones, and every level adds daily upkeep.</div></div>
+        <div class="row"><span class="badge">${I('clock', 12)}Head office upkeep <b data-f="hqup"></b>/day</span></div></div>
+        ${Object.keys(HQ_DEPTS).map(dep => {
+          const Dp = HQ_DEPTS[dep];
+          const ids = Object.keys(HQ_UPGRADES).filter(i => HQ_UPGRADES[i].dept === dep).sort((a, c) => HQ_UPGRADES[a].tier - HQ_UPGRADES[c].tier);
+          return `<div class="card section dept">
+            <div class="branch-head"><span class="emo">${Dp.icon}</span><div><b>${Dp.name}</b><span class="muted small">${Dp.desc}</span></div></div>
+            ${ids.map(id => {
+              const Hq = HQ_UPGRADES[id], lvl = S.hq[id] || 0, cost = G.hqCost(id), lock = G.hqLock(id);
+              return `<div class="upgrade-row ${cost === null ? 'maxed' : ''} ${lock ? 'locked' : ''}" id="hq-${id}">
+                <div class="ico">${Hq.icon}</div>
+                <div class="info"><b>${Hq.name} ${levelDots(lvl, Hq.max)}</b><span>${Hq.desc}</span>
+                  ${lock ? `<span class="lockline">${I('lock', 11)}${esc(lock)}</span>` : cost === null ? '' : `<span class="lockline muted">${I('clock', 11)}Adds ${fmt(cost * Hq.upkeep)}/day upkeep</span>`}</div>
+                ${cost === null ? '<span class="badge gold">MAX</span>'
+                  : lock ? `<span class="badge">${I('lock', 12)}Locked</span>`
+                  : `<button class="btn sm primary" data-action="hq" data-id="${id}" data-f="btn-${id}">${fmt(cost)}</button>`}
+              </div>`;
+            }).join('')}
+          </div>`;
+        }).join('')}
         <div class="grid cols-2 section">
           <div class="card"><h3>Subsidiaries</h3>${S.subsidiaries.length ? S.subsidiaries.map(s => `<div class="kv"><span>${s.icon} ${esc(s.name)}</span><span class="v good">+${fmt(s.income)}/day</span></div>`).join('') : '<div class="muted small">Acquire rivals from the Rivals tab to earn passive income.</div>'}</div>
           <div class="card"><h3>Company stats</h3><div id="hqStats"></div></div>
@@ -710,7 +854,8 @@
     },
     refreshHQ() {
       const S = G.S;
-      for (const id in HQ_UPGRADES) { const btn = $(`#hq-${id} [data-f="btn"]`); if (btn) { const c = G.hqCost(id); btn.disabled = c === null || S.cash < c; } }
+      for (const id in HQ_UPGRADES) { const btn = $(`[data-f="btn-${id}"]`); if (btn) { const c = G.hqCost(id); btn.disabled = c === null || S.cash < c; } }
+      setText('[data-f="hqup"]', fmt(G.hqUpkeep()));
       setHtml('#hqStats', `<div class="kv"><span>Total revenue</span><span class="v">${fmt(S.stats.totalRevenue)}</span></div><div class="kv"><span>Total profit</span><span class="v">${fmt(S.stats.totalProfit)}</span></div><div class="kv"><span>Units sold</span><span class="v">${S.stats.unitsSold.toLocaleString()}</span></div><div class="kv"><span>Peak value</span><span class="v">${fmt(S.stats.peakValue)}</span></div><div class="kv"><span>Biggest single sale</span><span class="v">${fmt(S.stats.biggestSale)}</span></div><div class="kv"><span>Trading profit</span><span class="v ${S.stats.tradingProfit >= 0 ? 'good' : 'bad'}">${fmt(S.stats.tradingProfit)}</span></div><div class="kv"><span>Quests completed</span><span class="v">${S.stats.questsDone}</span></div>`);
     },
 
@@ -789,6 +934,7 @@
         case 'marketMine': UI.marketMine = el.dataset.v === '1'; UI.render(true); return;
         case 'rivalsTab': UI.rivalsTab = el.dataset.tab; UI.render(true); return;
         case 'setRestockDays': UI.restockDays = +el.dataset.days; UI.render(true); return;
+        case 'ledgerSort': { const k = el.dataset.key; if (UI.ledgerSort.key === k) UI.ledgerSort.dir *= -1; else UI.ledgerSort = { key: k, dir: k === 'name' ? 1 : -1 }; UI.ledgerDay = -1; UI.refreshLedger(); return; }
         case 'buyBiz': { const r = G.buyBusiness(el.dataset.type); flash(r.ok, r.msg); if (r.ok) floatAt(el, `-${fmt(r.biz.paid)}`, 'bad'); break; }
         case 'sellBiz': { const b = G.biz(id); if (!b) return; Modal.open({ title: `Sell ${b.name}?`, icon: I('tag', 24), body: `<p>You will receive <b class="gold">${fmt(G.bizSaleValue(b))}</b> (55% of purchase price, 40% of upgrades, 50% of inventory). This cannot be undone.</p>`, actions: [{ label: 'Keep it', cls: '' }, { label: 'Sell', cls: 'danger', fn: () => { G.sellBusiness(id); UI.detailBiz = null; UI.render(true); } }] }); return; }
         case 'rename': { const b = G.biz(id); const name = prompt('Rename business:', b.name); if (name) { G.renameBusiness(id, name); } break; }
@@ -851,10 +997,12 @@
           <li><b>Market:</b> wholesale prices move with supply and demand. Bulk buying pushes them up. Events (heatwaves, recessions, viral trends…) change demand and costs for days at a time.</li>
           <li><b>Bank:</b> loans charge daily interest. Cash below zero triggers an overdraft: 10 days to recover or you go <b>bankrupt</b>.</li>
           <li><b>Expand:</b> new business types unlock as your value grows. Each extra copy of the same type costs more and shares customers.</li>
-          <li><b>Upgrades:</b> per-business upgrades (storage, renovation, automation…) and HQ upgrades (logistics, marketing, investor relations…).</li>
+          <li><b>Costs:</b> you pay wages, rent, corporate overhead that grows with the number of businesses, daily upkeep on every upgrade, loan interest, and <b>corporate tax</b> on profit. Losses carry forward against future tax.</li>
+          <li><b>Upgrades:</b> four branches per business (Capacity, Operations, Experience, Growth) and five HQ departments. Later tiers unlock behind earlier ones and each level adds daily upkeep, so only buy what pays for itself.</li>
+          <li><b>Ledger:</b> the Ledger tab shows yesterday's profit and loss for every business, with margin and return on the money you put in. Sort it to find what to fix or sell.</li>
           <li><b>Rivals:</b> eight AI companies compete for customers. Overtake them on the leaderboard, trade their stock, or acquire them outright.</li>
           <li><b>Quests &amp; achievements</b> pay cash rewards. Keep an eye on the feed.</li>
-          <li><b>Keys:</b> <b>Space</b> pause · <b>1-4</b> speed · <b>D B M K H R</b> switch tabs · <b>Esc</b> close.</li>
+          <li><b>Keys:</b> <b>Space</b> pause · <b>1-4</b> speed · <b>D B L M K H R</b> switch tabs · <b>Esc</b> close.</li>
         </ul>`, actions: [{ label: 'Got it', cls: 'primary' }] });
     },
     showAchievements() {

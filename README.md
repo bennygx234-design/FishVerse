@@ -38,12 +38,14 @@ vercel --prod
 | --- | --- |
 | **Businesses** | 11 types across 7 tiers, from Corner Store to Aerospace Corp. Each sells 4 products, needs staff, pays rent, and builds reputation. Extra copies of the same type cost more and share customers. |
 | **Supply & demand** | Every product has a live wholesale price driven by supply (bulk buying pushes it up, it recovers over time) and a drifting demand level. Your retail price versus the fair price sets how many customers buy. |
-| **Staff & wages** | Employees serve a fixed number of customers a day. Pay above market for productivity and morale; understaffing costs sales and reputation. |
+| **Staff & wages** | Employees serve a fixed number of customers a day. Pay above market for productivity and morale; understaffing costs sales and reputation. Market wages drift up as your company grows. |
+| **Running costs** | Nothing is free. You pay wages, rent, **corporate overhead** that scales with how many businesses you own, **daily upkeep** on every upgrade level, loan interest, and **progressive corporate tax** on profit. Losses carry forward against future tax. |
+| **Ledger** | A per-business profit and loss statement for yesterday: revenue, goods, wages, fixed costs, overhead, upkeep, tax share, net, margin and return on invested capital. Sortable, and the rows reconcile exactly to the company total. |
 | **Bank** | Credit grows with net assets. Interest accrues daily and rises with utilization. Negative cash starts a 10-day overdraft countdown to **bankruptcy**. |
 | **Market events** | 30+ random events — heatwaves, recessions, viral trends, supply-chain crises, strikes, market crashes — plus decision events with real trade-offs. |
 | **Company valuation** | Net assets plus goodwill (a multiple of average daily profit, scaled by growth momentum and investor sentiment). It jitters like a stock and has a share price. Reach **$1B** to win. |
 | **Rivals** | Eight AI companies grow, taunt you, steal customers and crash in downturns. Overtake them on the leaderboard, trade their shares, or acquire them outright. |
-| **Upgrades** | Per-business (storage, renovation, automation, loyalty, premium branding) and company-wide HQ upgrades (logistics, marketing, HR, analytics, legal, investor relations, franchising). |
+| **Upgrades** | Twelve per-business upgrades in four branches (Capacity, Operations, Experience, Growth) and fifteen HQ upgrades across five departments (Supply Chain, Growth, People, Finance, Intelligence). Later tiers unlock behind earlier ones, and every level adds daily upkeep, so an upgrade is only worth buying if it earns more than it costs to keep. |
 | **Quests & achievements** | Rotating objectives and 25 achievements with cash rewards keep every session moving. |
 
 ## Controls
@@ -52,7 +54,7 @@ vercel --prod
 | --- | --- |
 | `Space` | Pause / resume |
 | `1` `2` `3` `4` | 1× / 2× / 4× / 8× speed |
-| `D` `B` `M` `K` `H` `R` | Dashboard, Businesses, Market, Bank, HQ, Rivals |
+| `D` `B` `L` `M` `K` `H` `R` | Dashboard, Businesses, Ledger, Market, Bank, HQ, Rivals |
 | `Esc` | Close dialogs |
 
 ## Project layout

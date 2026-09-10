@@ -150,6 +150,7 @@
     if (e.code === 'Space') { e.preventDefault(); if (paused) setSpeed(speed); else setSpeed(0); UI.updateSpeedButtons(); UI.Sound.play('click'); }
     else if (e.key === '1') setSpeed(1); else if (e.key === '2') setSpeed(2); else if (e.key === '3') setSpeed(4); else if (e.key === '4') setSpeed(8);
     else if (e.key === 'd' || e.key === 'D') UI.showView('dashboard'); else if (e.key === 'b' || e.key === 'B') UI.showView('businesses');
+    else if (e.key === 'l' || e.key === 'L') UI.showView('ledger');
     else if (e.key === 'm' || e.key === 'M') UI.showView('market'); else if (e.key === 'k' || e.key === 'K') UI.showView('bank');
     else if (e.key === 'h' || e.key === 'H') UI.showView('hq'); else if (e.key === 'r' || e.key === 'R') UI.showView('rivals');
     UI.updateSpeedButtons();

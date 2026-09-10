@@ -64,7 +64,7 @@
     patents:    { name: 'Biotech Patents',  icon: '🧬', cat: 'pharma',     cost: 500000, markup: 1.8, weight: 0.0005, elasticity: 2.5, volume: 50 },
     // Aerospace
     drones:     { name: 'Drones',           icon: '🛸', cat: 'aero',       cost: 2000,     markup: 2.0, weight: 1.0,   elasticity: 2.0, volume: 5000 },
-    tickets:    { name: 'Space Tourism',    icon: '🎫', cat: 'aero',       cost: 250000,   markup: 2.5, weight: 0.02,  elasticity: 2.4, volume: 100 },
+    tickets:    { name: 'Space Tourism',    icon: '🎫', cat: 'aero',       cost: 200000,   markup: 2.5, weight: 0.02,  elasticity: 2.4, volume: 100 },
     satellites: { name: 'Satellites',       icon: '🛰️', cat: 'aero',       cost: 3000000,  markup: 1.6, weight: 0.005, elasticity: 2.6, volume: 20 },
     launches:   { name: 'Rocket Launches',  icon: '🚀', cat: 'aero',       cost: 20000000, markup: 1.5, weight: 0.001, elasticity: 2.8, volume: 5 },
   };
@@ -87,42 +87,110 @@
                    blurb: 'Trendy customers, premium prices, fickle demand.' },
     electronics: { name: 'Electronics Store',  icon: '📱', tier: 2, cost: 50000,     unlock: 25000,      traffic: 9.5,    rent: 250,    wage: 70,  staffCap: 8,   staff: 2,   products: ['headphones', 'phones', 'laptops', 'gadgets'],
                    blurb: 'Big-ticket gadgets. Price-sensitive shoppers.' },
-    restaurant:  { name: 'Restaurant',         icon: '🍽️', tier: 3, cost: 180000,    unlock: 100000,     traffic: 138,   rent: 900,    wage: 55,  staffCap: 45,  staff: 5,   products: ['meals', 'wine', 'desserts', 'cocktails'],
+    restaurant:  { name: 'Restaurant',         icon: '🍽️', tier: 3, cost: 140000,    unlock: 70000,      traffic: 138,   rent: 900,    wage: 55,  staffCap: 45,  staff: 5,   products: ['meals', 'wine', 'desserts', 'cocktails'],
                    blurb: 'Great margins and steady traffic. Needs a lot of staff.' },
-    supermarket: { name: 'Supermarket',        icon: '🛒', tier: 3, cost: 250000,    unlock: 150000,     traffic: 1100,  rent: 1500,   wage: 50,  staffCap: 250, staff: 8,   products: ['groceries', 'produce', 'meat', 'household'],
+    supermarket: { name: 'Supermarket',        icon: '🛒', tier: 3, cost: 250000,    unlock: 110000,     traffic: 1100,  rent: 1500,   wage: 50,  staffCap: 250, staff: 8,   products: ['groceries', 'produce', 'meat', 'household'],
                    blurb: 'Massive volume, thin margins. A cash machine when run well.' },
-    dealership:  { name: 'Car Dealership',     icon: '🚗', tier: 4, cost: 1500000,   unlock: 900000,     traffic: 1.6,   rent: 6000,   wage: 150, staffCap: 1,   staff: 3,   products: ['sedans', 'suvs', 'sports', 'evs'],
+    dealership:  { name: 'Car Dealership',     icon: '🚗', tier: 4, cost: 1100000,   unlock: 600000,     traffic: 1.6,   rent: 6000,   wage: 150, staffCap: 1,   staff: 3,   products: ['sedans', 'suvs', 'sports', 'evs'],
                    blurb: 'Few sales, enormous tickets. Inventory is expensive — use credit wisely.' },
-    tech:        { name: 'Tech Startup',       icon: '💻', tier: 5, cost: 6000000,   unlock: 3500000,    traffic: 370,   rent: 15000,  wage: 300, staffCap: 60,  staff: 10,  products: ['licenses', 'cloud', 'ai', 'enterprise'],
+    tech:        { name: 'Tech Startup',       icon: '💻', tier: 5, cost: 4500000,   unlock: 2200000,    traffic: 370,   rent: 15000,  wage: 300, staffCap: 60,  staff: 10,  products: ['licenses', 'cloud', 'ai', 'enterprise'],
                    blurb: 'Software scales. Enterprise contracts are rare but lucrative.' },
-    factory:     { name: 'Factory',            icon: '🏭', tier: 5, cost: 25000000,  unlock: 15000000,   traffic: 440,   rent: 60000,  wage: 120, staffCap: 60,  staff: 30,  products: ['steel', 'components', 'machinery', 'parts'],
+    factory:     { name: 'Factory',            icon: '🏭', tier: 5, cost: 18000000,  unlock: 9000000,    traffic: 440,   rent: 60000,  wage: 120, staffCap: 60,  staff: 30,  products: ['steel', 'components', 'machinery', 'parts'],
                    blurb: 'Heavy industry. Feeds the whole economy.' },
-    pharma:      { name: 'Pharma Lab',         icon: '🧬', tier: 6, cost: 80000000,  unlock: 45000000,   traffic: 4600, rent: 150000, wage: 400, staffCap: 200, staff: 50,  products: ['vitamins', 'medicines', 'vaccines', 'patents'],
+    pharma:      { name: 'Pharma Lab',         icon: '🧬', tier: 6, cost: 60000000,  unlock: 28000000,   traffic: 4600, rent: 150000, wage: 400, staffCap: 200, staff: 50,  products: ['vitamins', 'medicines', 'vaccines', 'patents'],
                    blurb: 'Research pays. Patents can be worth a fortune.' },
-    aerospace:   { name: 'Aerospace Corp',     icon: '🚀', tier: 7, cost: 300000000, unlock: 180000000,  traffic: 180,   rent: 800000, wage: 800, staffCap: 2.5, staff: 100, products: ['drones', 'tickets', 'satellites', 'launches'],
+    aerospace:   { name: 'Aerospace Corp',     icon: '🚀', tier: 7, cost: 220000000, unlock: 110000000,  traffic: 180,   rent: 800000, wage: 800, staffCap: 2.5, staff: 100, products: ['drones', 'tickets', 'satellites', 'launches'],
                    blurb: 'To the moon. Literally. Sell a rocket launch and retire.' },
   };
   const TYPE_ORDER = ['corner', 'coffee', 'fashion', 'electronics', 'restaurant', 'supermarket', 'dealership', 'tech', 'factory', 'pharma', 'aerospace'];
 
   // ---------- BUSINESS UPGRADES ---------------------------------------------
-  // cost = businessBaseCost * costFactor * 1.6^level
+  // Four branches, each gated behind the one before it. Every level costs cash up
+  // front AND a daily upkeep, so an upgrade is only worth it if the branch pays for
+  // itself. cost = businessBaseCost * cost * growth^level; upkeep = cost * upkeep.
+  // Effects are declarative and summed by the engine (see Game.bizEff).
+  const UPGRADE_BRANCHES = {
+    capacity:   { name: 'Capacity',   icon: '📦', desc: 'Hold more stock and waste less of it.' },
+    operations: { name: 'Operations', icon: '⚙️', desc: 'Serve more customers per employee.' },
+    experience: { name: 'Experience', icon: '✨', desc: 'Pull in more foot traffic and charge more.' },
+    growth:     { name: 'Growth',     icon: '📣', desc: 'Turn visitors into repeat customers.' },
+  };
   const UPGRADES = {
-    storage:    { name: 'Storage Expansion', icon: '📦', max: 5, costFactor: 0.15, desc: '+5 days of stock capacity per level.' },
-    renovation: { name: 'Renovation',        icon: '🛠️', max: 3, costFactor: 0.25, desc: '+8% foot traffic per level and an instant +10 reputation.' },
-    automation: { name: 'Automation',        icon: '🤖', max: 3, costFactor: 0.30, desc: 'Each employee serves 30% more customers per level.' },
-    loyalty:    { name: 'Loyalty Program',   icon: '💳', max: 1, costFactor: 0.35, desc: '+10% demand from repeat customers.' },
-    premium:    { name: 'Premium Branding',  icon: '✨', max: 2, costFactor: 0.40, desc: 'Customers tolerate higher prices (-20% price sensitivity per level).' },
+    // --- Capacity -----------------------------------------------------------
+    storage:      { branch: 'capacity', tier: 1, name: 'Stock Room',        icon: '📦', max: 3, cost: 0.14, growth: 1.7, upkeep: 0.004,
+                    desc: '+4 days of stock capacity per level.', fx: { capacityDays: 4 } },
+    coldchain:    { branch: 'capacity', tier: 2, name: 'Cold Chain',        icon: '🧊', max: 2, cost: 0.30, growth: 1.8, upkeep: 0.010, req: { storage: 2 },
+                    desc: 'Perishables spoil 45% slower per level.', fx: { spoilMult: 0.55 } },
+    distribution: { branch: 'capacity', tier: 3, name: 'Distribution Hub',  icon: '🚚', max: 2, cost: 0.60, growth: 1.9, upkeep: 0.012, req: { coldchain: 1 },
+                    desc: '-6% wholesale cost here and +3 days capacity per level.', fx: { buyCost: -0.06, capacityDays: 3 } },
+    // --- Operations ---------------------------------------------------------
+    automation:   { branch: 'operations', tier: 1, name: 'Self-Checkout',   icon: '🤖', max: 3, cost: 0.22, growth: 1.7, upkeep: 0.005,
+                    desc: 'Each employee serves 25% more customers per level.', fx: { throughput: 0.25 } },
+    training:     { branch: 'operations', tier: 2, name: 'Staff Training',  icon: '🎓', max: 3, cost: 0.26, growth: 1.7, upkeep: 0.008, req: { automation: 1 },
+                    desc: '+9% productivity and slower reputation decay per level.', fx: { productivity: 0.09, repFloor: 4 } },
+    robotics:     { branch: 'operations', tier: 3, name: 'Robotics Line',   icon: '🦾', max: 2, cost: 0.85, growth: 2.0, upkeep: 0.014, req: { training: 2 },
+                    desc: '+40% throughput and -15% wage bill per level.', fx: { throughput: 0.40, wages: -0.15 } },
+    // --- Experience ---------------------------------------------------------
+    renovation:   { branch: 'experience', tier: 1, name: 'Renovation',      icon: '🛠️', max: 3, cost: 0.24, growth: 1.7, upkeep: 0.004,
+                    desc: '+7% foot traffic per level, and +8 reputation right away.', fx: { traffic: 0.07 }, instant: { rep: 8 } },
+    premium:      { branch: 'experience', tier: 2, name: 'Premium Fit-out', icon: '💎', max: 2, cost: 0.45, growth: 1.8, upkeep: 0.011, req: { renovation: 2 },
+                    desc: 'Customers tolerate higher prices (-18% price sensitivity per level).', fx: { priceSens: -0.18 } },
+    flagship:     { branch: 'experience', tier: 3, name: 'Flagship Store',  icon: '🏛️', max: 1, cost: 1.30, growth: 2.0, upkeep: 0.020, req: { premium: 2 },
+                    desc: '+25% traffic, +15 reputation, and a reputation floor of 55.', fx: { traffic: 0.25, repFloor: 12 }, instant: { rep: 15 } },
+    // --- Growth -------------------------------------------------------------
+    loyalty:      { branch: 'growth', tier: 1, name: 'Loyalty Program',     icon: '💳', max: 2, cost: 0.28, growth: 1.7, upkeep: 0.007,
+                    desc: '+8% demand from repeat customers per level.', fx: { demand: 0.08 } },
+    membership:   { branch: 'growth', tier: 2, name: 'Membership Tiers',    icon: '🎟️', max: 2, cost: 0.50, growth: 1.8, upkeep: 0.012, req: { loyalty: 2 },
+                    desc: '+9% demand and -7% price sensitivity per level.', fx: { demand: 0.09, priceSens: -0.07 } },
+    ambassadors:  { branch: 'growth', tier: 3, name: 'Brand Ambassadors',   icon: '📣', max: 1, cost: 1.10, growth: 2.0, upkeep: 0.018, req: { membership: 1 },
+                    desc: '+20% traffic and marketing spend works 50% harder.', fx: { traffic: 0.20, marketing: 0.5 } },
   };
 
-  // ---------- HQ (COMPANY-WIDE) UPGRADES --------------------------------------
+  // ---------- HQ DEPARTMENTS --------------------------------------------------
+  // Company-wide. Same rules: cash up front plus daily upkeep, later tiers gated.
+  const HQ_DEPTS = {
+    supply:  { name: 'Supply Chain',  icon: '🚛', desc: 'Buy cheaper and hold more.' },
+    growth:  { name: 'Growth',        icon: '📈', desc: 'More customers, cheaper expansion.' },
+    people:  { name: 'People',        icon: '👥', desc: 'Cheaper, better, happier staff.' },
+    finance: { name: 'Finance',       icon: '🏦', desc: 'Cheaper debt, lower tax, higher multiple.' },
+    intel:   { name: 'Intelligence',  icon: '🛰️', desc: 'Information, protection, automation.' },
+  };
   const HQ_UPGRADES = {
-    logistics: { name: 'Logistics Network', icon: '🚚', max: 5, base: 2500,   mult: 4, desc: '-5% wholesale purchase cost per level.' },
-    marketing: { name: 'Marketing Agency',  icon: '📣', max: 5, base: 3000,   mult: 4, desc: '+6% traffic at every business per level.' },
-    hr:        { name: 'HR Department',     icon: '👥', max: 4, base: 4000,   mult: 4, desc: '-6% wages and +3% productivity per level.' },
-    analytics: { name: 'Analytics Suite',   icon: '📊', max: 1, base: 6000,   mult: 1, desc: 'Unlocks demand forecasts, price suggestions and Smart Pricing.' },
-    legal:     { name: 'Legal Team',        icon: '⚖️', max: 1, base: 25000,  mult: 1, desc: 'Negative events hurt 35% less.' },
-    ir:        { name: 'Investor Relations',icon: '🏦', max: 3, base: 50000,  mult: 5, desc: '+10% company valuation multiple per level.' },
-    franchise: { name: 'Franchise Program', icon: '🏬', max: 3, base: 75000,  mult: 5, desc: '-8% cost of new businesses per level.' },
+    // --- Supply chain -------------------------------------------------------
+    procurement: { dept: 'supply', tier: 1, name: 'Procurement Team', icon: '📋', max: 4, base: 4000,    mult: 4.2, upkeep: 0.005,
+                   desc: '-4% wholesale cost everywhere per level.', fx: { buyCost: -0.04 } },
+    warehousing: { dept: 'supply', tier: 2, name: 'Regional Warehouses', icon: '🏗️', max: 2, base: 90000, mult: 5, upkeep: 0.010, req: { procurement: 2 },
+                   desc: '+3 days of stock capacity at every business per level.', fx: { capacityDays: 3 } },
+    freight:     { dept: 'supply', tier: 3, name: 'Freight Network', icon: '✈️', max: 2, base: 900000, mult: 5, upkeep: 0.012, req: { warehousing: 1 },
+                   desc: '-7% wholesale cost and bulk buying moves prices 40% less per level.', fx: { buyCost: -0.07, supplyImpact: -0.4 } },
+    // --- Growth -------------------------------------------------------------
+    marketing:   { dept: 'growth', tier: 1, name: 'Marketing Agency', icon: '📣', max: 4, base: 5000,    mult: 4.2, upkeep: 0.006,
+                   desc: '+5% traffic at every business per level.', fx: { traffic: 0.05 } },
+    brand:       { dept: 'growth', tier: 2, name: 'Brand Studio', icon: '🎨', max: 2, base: 120000, mult: 5, upkeep: 0.011, req: { marketing: 2 },
+                   desc: '-8% price sensitivity everywhere per level.', fx: { priceSens: -0.08 } },
+    franchise:   { dept: 'growth', tier: 3, name: 'Franchise Program', icon: '🏬', max: 3, base: 400000, mult: 4.5, upkeep: 0.008, req: { brand: 1 },
+                   desc: '-7% cost of new businesses and -4% market saturation per level.', fx: { bizCost: -0.07, saturation: -0.04 } },
+    // --- People -------------------------------------------------------------
+    hr:          { dept: 'people', tier: 1, name: 'HR Department', icon: '👥', max: 3, base: 7000,     mult: 4.2, upkeep: 0.006,
+                   desc: '-5% wages everywhere per level.', fx: { wages: -0.05 } },
+    academy:     { dept: 'people', tier: 2, name: 'Corporate Academy', icon: '🎓', max: 3, base: 110000, mult: 4.5, upkeep: 0.009, req: { hr: 1 },
+                   desc: '+5% productivity everywhere per level.', fx: { productivity: 0.05 } },
+    benefits:    { dept: 'people', tier: 3, name: 'Benefits Package', icon: '🩺', max: 2, base: 700000, mult: 5, upkeep: 0.014, req: { academy: 2 },
+                   desc: '+6 reputation floor and -20% wage inflation per level.', fx: { repFloor: 6, wageInflation: -0.2 } },
+    // --- Finance ------------------------------------------------------------
+    treasury:    { dept: 'finance', tier: 1, name: 'Treasury Desk', icon: '💰', max: 3, base: 30000,    mult: 4.5, upkeep: 0.004,
+                   desc: '-15% loan interest and +12% credit limit per level.', fx: { interest: -0.15, credit: 0.12 } },
+    tax:         { dept: 'finance', tier: 2, name: 'Tax Strategy', icon: '🧾', max: 3, base: 250000, mult: 4.5, upkeep: 0.010, req: { treasury: 1 },
+                   desc: '-4 percentage points of corporate tax per level.', fx: { taxCut: 0.04 } },
+    ir:          { dept: 'finance', tier: 3, name: 'Investor Relations', icon: '🏦', max: 3, base: 1500000, mult: 4.5, upkeep: 0.012, req: { tax: 1 },
+                   desc: '+9% company valuation multiple per level.', fx: { multiple: 0.09 } },
+    // --- Intelligence -------------------------------------------------------
+    analytics:   { dept: 'intel', tier: 1, name: 'Analytics Suite', icon: '📊', max: 1, base: 18000,    mult: 1, upkeep: 0.006,
+                   desc: 'Unlocks demand forecasts, suggested prices and Smart Pricing.', fx: {} },
+    legal:       { dept: 'intel', tier: 2, name: 'Legal Team', icon: '⚖️', max: 1, base: 160000, mult: 1, upkeep: 0.010, req: { analytics: 1 },
+                   desc: 'Negative events hurt 35% less.', fx: {} },
+    ops:         { dept: 'intel', tier: 3, name: 'Operations Centre', icon: '🛰️', max: 2, base: 1200000, mult: 5, upkeep: 0.012, req: { legal: 1 },
+                   desc: '-8% corporate overhead per level and auto-restock never overspends.', fx: { overhead: -0.08 } },
   };
 
   // ---------- AI COMPETITORS ----------------------------------------------------
@@ -273,47 +341,77 @@
     { id: 'rep_90',       icon: '⭐', name: 'Beloved',             desc: 'Reach 90 reputation at a business.',        check: s => s.businesses.some(b => b.rep >= 90), bonus: 1000 },
     { id: 'value_10k',    icon: '🌱', name: 'Sprouting',           desc: 'Reach $10K company value.',                 check: s => s.valuation >= 1e4, bonus: 300 },
     { id: 'value_100k',   icon: '📈', name: 'Six Figures',         desc: 'Reach $100K company value.',                check: s => s.valuation >= 1e5, bonus: 2500 },
-    { id: 'value_1m',     icon: '💎', name: 'Millionaire',         desc: 'Reach $1M company value.',                  check: s => s.valuation >= 1e6, bonus: 25000 },
-    { id: 'value_10m',    icon: '🏆', name: 'Tycoon',              desc: 'Reach $10M company value.',                 check: s => s.valuation >= 1e7, bonus: 250000 },
-    { id: 'value_100m',   icon: '👑', name: 'Mogul',               desc: 'Reach $100M company value.',                check: s => s.valuation >= 1e8, bonus: 2500000 },
+    { id: 'value_1m',     icon: '💎', name: 'Millionaire',         desc: 'Reach $1M company value.',                  check: s => s.valuation >= 1e6, bonus: 9000 },
+    { id: 'value_10m',    icon: '🏆', name: 'Tycoon',              desc: 'Reach $10M company value.',                 check: s => s.valuation >= 1e7, bonus: 70000 },
+    { id: 'value_100m',   icon: '👑', name: 'Mogul',               desc: 'Reach $100M company value.',                check: s => s.valuation >= 1e8, bonus: 120000 },
     { id: 'value_1b',     icon: '🌍', name: 'Market Mayhem',       desc: 'Reach $1B company value. You win!',         check: s => s.valuation >= 1e9 },
-    { id: 'five_biz',     icon: '🏙️', name: 'Empire Builder',      desc: 'Own 5 businesses.',                         check: s => s.businesses.length >= 5, bonus: 20000 },
-    { id: 'ten_biz',      icon: '🌆', name: 'Conglomerate',        desc: 'Own 10 businesses.',                        check: s => s.businesses.length >= 10, bonus: 500000 },
+    { id: 'five_biz',     icon: '🏙️', name: 'Empire Builder',      desc: 'Own 5 businesses.',                         check: s => s.businesses.length >= 5, bonus: 7000 },
+    { id: 'ten_biz',      icon: '🌆', name: 'Conglomerate',        desc: 'Own 10 businesses.',                        check: s => s.businesses.length >= 10, bonus: 120000 },
     { id: 'survive_rec',  icon: '🛡️', name: 'Storm Rider',         desc: 'Survive a recession with positive cash.',   check: s => s.stats.recessionsSurvived > 0, bonus: 5000 },
     { id: 'beat_rival',   icon: '🥊', name: 'Giant Slayer',        desc: 'Overtake a rival in company value.',        check: s => s.stats.rivalsBeaten > 0, bonus: 2000 },
-    { id: 'top_rank',     icon: '🥇', name: 'Number One',          desc: 'Become the most valuable company.',         check: s => s.stats.reachedRank1, bonus: 1000000 },
+    { id: 'top_rank',     icon: '🥇', name: 'Number One',          desc: 'Become the most valuable company.',         check: s => s.stats.reachedRank1, bonus: 200000 },
     { id: 'acquire',      icon: '🤝', name: 'Hostile Takeover',    desc: 'Acquire a rival company.',                  check: s => s.stats.acquisitions > 0 },
     { id: 'debt_free',    icon: '🕊️', name: 'Debt Free',           desc: 'Repay $50K of loans in total.',            check: s => s.stats.loansRepaid >= 50000, bonus: 5000 },
-    { id: 'big_sale',     icon: '🚀', name: 'Moonshot',            desc: 'Sell a single item worth $1M or more.',     check: s => s.stats.biggestSale >= 1e6, bonus: 1000000 },
-    { id: 'trader',       icon: '📊', name: 'Wolf of Main Street', desc: 'Make $100K profit trading rival stocks.',   check: s => s.stats.tradingProfit >= 1e5, bonus: 50000 },
+    { id: 'big_sale',     icon: '🚀', name: 'Moonshot',            desc: 'Sell a single item worth $1M or more.',     check: s => s.stats.biggestSale >= 1e6, bonus: 200000 },
+    { id: 'trader',       icon: '📊', name: 'Wolf of Main Street', desc: 'Make $100K profit trading rival stocks.',   check: s => s.stats.tradingProfit >= 1e5, bonus: 18000 },
     { id: 'streak_30',    icon: '🔥', name: 'On a Roll',           desc: 'Stay profitable 30 days in a row.',         check: s => s.stats.bestStreak >= 30, bonus: 3000 },
-    { id: 'quests_10',    icon: '📜', name: 'Overachiever',        desc: 'Complete 10 quests.',                       check: s => s.stats.questsDone >= 10, bonus: 10000 },
-    { id: 'year_one',     icon: '📅', name: 'Anniversary',         desc: 'Survive one full year (360 days).',         check: s => s.day >= 360, bonus: 10000 },
-    { id: 'all_types',    icon: '🧩', name: 'Diversified',         desc: 'Own every type of business.',               check: s => new Set(s.businesses.map(b => b.type)).size >= TYPE_ORDER.length, bonus: 5000000 },
+    { id: 'quests_10',    icon: '📜', name: 'Overachiever',        desc: 'Complete 10 quests.',                       check: s => s.stats.questsDone >= 10, bonus: 4000 },
+    { id: 'year_one',     icon: '📅', name: 'Anniversary',         desc: 'Survive one full year (360 days).',         check: s => s.day >= 360, bonus: 4000 },
+    { id: 'all_types',    icon: '🧩', name: 'Diversified',         desc: 'Own every type of business.',               check: s => new Set(s.businesses.map(b => b.type)).size >= TYPE_ORDER.length, bonus: 900000 },
   ];
 
   const TIPS = [
     'Prices track wholesale costs. When costs rise, raise prices or your margin evaporates.',
+    'Every upgrade adds daily upkeep. Check the Ledger to see whether it actually paid for itself.',
+    'Corporate overhead grows with the number of businesses you own. A few great stores beat many mediocre ones.',
+    'Corporate tax is charged on the 30-day average, so a single huge day will not spike your rate.',
+    'Losses carry forward: a bad month reduces the tax on the good month that follows.',
+    'The Ledger sorts by margin and return. Fix or sell whatever sits at the bottom.',
     'Understaffed stores lose sales AND reputation. Watch the service bar.',
     'Auto-restock keeps shelves full so you can focus on expansion.',
-    'Loans are cheap when your ROI is high. Debt is a tool, not a sin.',
-    'Reputation multiplies traffic. Keep stock full and staff happy.',
+    'Loans are cheap when your return beats the interest. Debt is a tool, not a sin.',
+    'Reputation multiplies traffic. Keep stock full and staff paid.',
     'Rival stocks crash during market panics. Buy the dip.',
-    'Each additional store of the same type shares the same customers.',
-    'Bulk buying pushes wholesale prices up. Spread your purchases out.',
-    'Investor Relations upgrades boost your valuation multiple directly.',
-    'Space is pointless unless you can pay rent. Check the P&L before expanding.',
-    'Perishable goods spoil. Do not overstock coffee shops and restaurants.',
+    'Each extra store of the same type shares the same customers. Franchise Program softens that.',
+    'Bulk buying pushes wholesale prices up. A Freight Network softens the blow.',
+    'Wages drift up as your company grows. HR and Benefits keep the bill down.',
+    'Tax Strategy in the Finance department cuts your rate by 4 points per level.',
+    'Perishables spoil daily. Cold Chain pays for itself in a busy food business.',
     'Press SPACE to pause and 1-4 to change speed.',
   ];
 
   const DIFFICULTY = {
-    easy:   { name: 'Easy',   badEvents: 0.7, rivalGrowth: 0.8,  rate: 0.8, demand: 1.1, desc: 'Gentler events, slower rivals, cheaper loans.' },
-    normal: { name: 'Normal', badEvents: 1.0, rivalGrowth: 1.0,  rate: 1.0, demand: 1.0, desc: 'The intended experience.' },
-    hard:   { name: 'Hard',   badEvents: 1.3, rivalGrowth: 1.25, rate: 1.3, demand: 0.9, desc: 'Brutal events, aggressive rivals, expensive credit.' },
+    easy:   { name: 'Easy',   badEvents: 0.7, rivalGrowth: 0.8,  rate: 0.8, demand: 1.1, tax: 0.75, overhead: 0.8, desc: 'Lower tax and overhead, gentler events, slower rivals.' },
+    normal: { name: 'Normal', badEvents: 1.0, rivalGrowth: 1.0,  rate: 1.0, demand: 1.0, tax: 1.0,  overhead: 1.0, desc: 'The intended experience.' },
+    hard:   { name: 'Hard',   badEvents: 1.3, rivalGrowth: 1.25, rate: 1.3, demand: 0.9, tax: 1.2,  overhead: 1.25, desc: 'Heavier tax and overhead, brutal events, aggressive rivals.' },
   };
 
-  const DATA = { PRODUCTS, CATEGORIES, BUSINESS_TYPES, TYPE_ORDER, UPGRADES, HQ_UPGRADES, COMPETITORS, EVENTS, QUEST_TEMPLATES, ACHIEVEMENTS, TIPS, DIFFICULTY,
+  // ---------- ECONOMY ---------------------------------------------------------
+  // Corporate tax is charged daily on profit before tax. Brackets are on the
+  // 30-day average so a single good day does not spike your rate.
+  const TAX_BRACKETS = [
+    { upTo: 450,      rate: 0.00 },
+    { upTo: 6000,     rate: 0.12 },
+    { upTo: 80000,    rate: 0.20 },
+    { upTo: 1500000,  rate: 0.28 },
+    { upTo: Infinity, rate: 0.35 },
+  ];
+  const ECONOMY = {
+    // Head-office cost, charged daily as a share of every business's rent. The
+    // share climbs with headcount: an empire is expensive to administrate.
+    overheadBase: 0.30,
+    overheadPerBiz: 0.026,
+    overheadMax: 1.15,
+    // Wages drift up as the company grows and competes for talent.
+    wageInflation: 0.075,
+    // Each extra business of the same type eats into the others' customers.
+    saturation: 0.86,
+    bizCostGrowth: 1.40,
+    spoilRate: 0.045,
+  };
+
+  const DATA = { PRODUCTS, CATEGORIES, BUSINESS_TYPES, TYPE_ORDER, UPGRADES, UPGRADE_BRANCHES, HQ_UPGRADES, HQ_DEPTS,
+    COMPETITORS, EVENTS, QUEST_TEMPLATES, ACHIEVEMENTS, TIPS, DIFFICULTY, TAX_BRACKETS, ECONOMY,
     WIN_VALUE: 1e9, START_CASH: 1000, SHARES: 1000000 };
 
   root.MM_DATA = DATA;

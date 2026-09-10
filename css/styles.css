@@ -510,6 +510,32 @@ input[type=range]::-moz-range-thumb { width: 20px; height: 20px; border-radius: 
 .upgrade-row.maxed { background: linear-gradient(150deg, rgba(255,192,67,.16), rgba(255,255,255,.04)); border-color: rgba(255,192,67,.35); }
 .upgrade-card .lvl { margin-top: 4px; }
 
+/* ---------- upgrade branches & departments ---------- */
+.branch { margin-bottom: 20px; }
+.branch:last-child { margin-bottom: 0; }
+.branch-head { display: flex; align-items: center; gap: 11px; margin-bottom: 11px; padding-bottom: 10px; border-bottom: 1px solid var(--hair); }
+.branch-head .emo { font-size: 15px; }
+.branch-head b { font-family: var(--display); font-weight: 600; font-size: 15px; display: block; }
+.branch-head span.small { display: block; line-height: 1.35; }
+.dept .branch-head { margin-bottom: 13px; }
+.upgrade-row.locked { opacity: .62; }
+.upgrade-row.locked .ico { filter: grayscale(1); }
+.lockline { display: inline-flex; align-items: center; gap: 5px; margin-top: 4px; font-size: 11.5px; color: var(--amber); font-weight: 600; }
+.lockline.muted { color: var(--ink-4); font-weight: 500; }
+
+/* ---------- ledger ---------- */
+.table.ledger { font-size: 12.5px; }
+.table.ledger th, .table.ledger td { padding: 9px 9px; }
+.table.ledger th:first-child, .table.ledger td:first-child { padding-left: 4px; }
+.table.ledger th.sortable { cursor: pointer; user-select: none; transition: color .15s; white-space: nowrap; }
+.table.ledger th.sortable:hover { color: var(--ink); }
+.table.ledger tfoot td { border-top: 1px solid var(--hair-2); border-bottom: 0; padding-top: 12px; font-weight: 700; }
+.table.ledger tbody tr { cursor: pointer; }
+.lname { display: flex; align-items: center; gap: 10px; }
+.lname .emo { font-size: 14px; }
+.lname b { display: block; font-weight: 700; white-space: nowrap; }
+.lname .muted { display: block; line-height: 1.2; }
+
 /* ---------- toasts ---------- */
 #toasts { position: fixed; bottom: var(--gap); right: calc(var(--feed-w) + var(--gap) * 2); display: flex; flex-direction: column; align-items: flex-end; gap: 9px; z-index: 50; pointer-events: none; width: min(330px, calc(100vw - 28px)); }
 .toast {
