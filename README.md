@@ -1,4 +1,4 @@
-# 📈 Market Mayhem
+# Market Mayhem
 
 **Turn $1,000 and a corner store into a $1,000,000,000 empire.**
 
@@ -18,7 +18,7 @@ The game is a static site, so Vercel needs no build step. `vercel.json` is alrea
 
 **From the dashboard (recommended)**
 
-1. Go to [vercel.com/new](https://vercel.com/new) and import the `FishVerse` repository.
+1. Go to [vercel.com/new](https://vercel.com/new) and import the `market-mayhem` repository.
 2. Leave **Framework Preset** as *Other* and the build command empty.
 3. Click **Deploy**. Vercel serves `index.html` from the repository root.
 
