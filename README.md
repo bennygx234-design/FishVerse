@@ -69,6 +69,8 @@ js/icons.js       inline SVG icon set
 js/charts.js      dependency-free canvas charts
 js/ui.js          views, bindings, toasts, modals, sound, confetti
 js/main.js        game loop, start screen, keyboard, persistence
+tools/sim.js      headless balance harness
+docs/             architecture, game design, design system
 ```
 
 ## Look and feel
@@ -90,7 +92,23 @@ running at 8x speed.
 - Icons: [Lucide](https://lucide.dev) — ISC License
 - Fonts: Outfit and Plus Jakarta Sans — SIL Open Font License 1.1 (see `fonts/README.md`)
 
+## Documentation
+
+| File | What's in it |
+| --- | --- |
+| [`CLAUDE.md`](CLAUDE.md) | How to work in this repository: how to run and test it, conventions, and the invariants that cost real bugs to learn |
+| [`docs/architecture.md`](docs/architecture.md) | Module map, the game loop, state shape, event bus, the render strategy, save migration |
+| [`docs/game-design.md`](docs/game-design.md) | The economy in full: demand and pricing formulas, the cost stack, tax, valuation, upgrade trees, balance targets |
+| [`docs/design-system.md`](docs/design-system.md) | Type, colour, glass, layout, components, and why `backdrop-filter` is banned |
+| [`tools/README.md`](tools/README.md) | The headless balance harness |
+
 The engine has no DOM dependencies, so you can balance-test it from Node:
+
+```bash
+node tools/sim.js 6
+```
+
+or drive it directly:
 
 ```js
 const { Game } = require('./js/engine.js');
