@@ -29,8 +29,12 @@ function run(label, maxDays = 4000, opts = {}) {
   for (let d = 0; d < maxDays; d++) {
     if (S.events.pending) {
       const fee = S.events.pending.param.fee || 0, id = S.events.pending.id;
-      const accept = id === 'buyout' ? false : id === 'recall' ? true : id === 'union' ? true : S.cash > fee * 5;
+      const accept = id === 'buyout' ? false : id === 'hostile_bid' ? false : id === 'recall' ? true : id === 'union' ? true : S.cash > fee * 5;
       g.resolveChoice(accept ? 0 : 1);
+    }
+    // timed offers: distressed sales and star managers when cash allows
+    for (const o of [...S.offers]) {
+      if ((o.tid === 'distressed' || o.tid === 'star_manager' || o.tid === 'bulk_lot') && S.cash > o.fee * 3) g.acceptOffer(o.id);
     }
     for (const b of S.businesses) {
       b.autoRestock = true; b.stockDays = 4;
@@ -38,6 +42,10 @@ function run(label, maxDays = 4000, opts = {}) {
       if (b.staff < rec) g.hire(b.id, rec - b.staff);
       else if (b.staff > rec + 1) g.fire(b.id, b.staff - rec);
       g.applySuggestedPrices(b.id);
+      // match a rival's price war so customers stay
+      if (g.priceWarIn(b.type)) for (const pid in b.prices) g.setPrice(b.id, pid, g.fairPrice(pid) * 0.96);
+      // a small raise keeps people from quitting once the store earns
+      if (b.wageMult < 1.1 && g.bizProfitEstimate(b) > BUSINESS_TYPES[b.type].rent * 2) g.setWage(b.id, 1.1);
       const T = BUSINESS_TYPES[b.type];
       if (g.bizProfitEstimate(b) > T.rent * 3) g.setMarketing(b.id, T.rent * 1.5);
       // upgrades: only when the daily benefit plausibly beats the daily upkeep,
@@ -57,11 +65,16 @@ function run(label, maxDays = 4000, opts = {}) {
       const c = g.hqCost(id);
       if (c !== null && c < S.cash * 0.08 && g.hqUpkeep() + c * HQ_UPGRADES[id].upkeep < Math.max(50, S.ema30 * 0.3)) g.buyHqUpgrade(id);
     }
+    // loans balloon after 90 days: refinance when flush, otherwise keep cash for them
+    for (const l of [...S.loans]) if (l.due - S.day <= 5 && S.cash < l.amount * 1.5) g.refinanceLoan(l.id);
+    // keep a reserve for the year-end levy in the last quarter
+    const levyReserve = g.daysToLevy() < 90 ? g.levyDue() : 0;
     // expansion: richest affordable type, keeping a reserve
-    const reserve = g._dailyFixedCosts(g.activeEffects()) * 8;
+    const reserve = g._dailyFixedCosts(g.activeEffects()) * 8 + levyReserve;
     let best = null;
     for (const t of TYPE_ORDER) {
       if (!S.unlocked[t]) continue;
+      if (S.businesses.filter(b => b.type === t).length >= 6) continue; // saturation makes a 7th copy pointless
       const cost = g.bizCost(t);
       const invNeed = BUSINESS_TYPES[t].products.reduce((a, pid) => a + g.buyCost(pid) * BUSINESS_TYPES[t].traffic * PRODUCTS[pid].weight * 4, 0);
       if (S.cash + g.availableCredit() * 0.7 >= cost + invNeed + reserve) best = { t, cost, total: cost + invNeed + reserve };

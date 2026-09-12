@@ -99,5 +99,5 @@ No view may scroll horizontally; wide tables scroll inside their own `.table-wra
 
 `.btn` (`primary`, `gold`, `mint`, `danger`, `ghost`, `sm`, `xs`, `block`), `.iconbtn`,
 `.badge`, `.chip`, `.trend` pills, `.bar` progress, `.toggle`, `.tabs` segmented control,
-`.card`, `.stat-card`, `.biz-card`, `.upgrade-row`, `.branch`, `.prod-row`, `.toast`,
+`.card`, `.stat-card`, `.biz-card`, `.upgrade-row`, `.branch`, `.pcard`, `.hero`, `.att`, `.offer`, `.toast`,
 `.modal-box`, `.table.ledger`.
