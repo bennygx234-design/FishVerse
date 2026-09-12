@@ -24,13 +24,13 @@ There is no test framework. There are two harnesses, and both matter.
 node tools/sim.js 6          # 6 auto-played games, prints pacing and margins
 ```
 
-A competent auto-player should win in roughly **1200-1500 days** at **25-45% net margin**.
-If a change moves the median outside that band, it changed the game's difficulty — say so
-explicitly rather than letting it drift.
+The auto-player should win **5-7 of 8** runs, median **1,400-1,800 days**, at **30-40% net
+margin**. If a change moves the median outside that band, it changed the game's difficulty —
+say so explicitly rather than letting it drift.
 
-**Browser (Playwright).** Chromium is preinstalled at `/opt/pw-browsers`; Playwright lives
-at `/opt/node22/lib/node_modules/playwright`. Drive the real page: click through every
-view, run at 8x, watch for `pageerror` and `console.error`. Zero console errors is the bar.
+**Browser.** Serve the folder with any static server and drive the real page: click through
+every view, run at 8x, watch for `pageerror` and `console.error`. Zero console errors is the
+bar. `window.MM.game` is the engine instance, so days can be advanced from the console.
 
 ## Layout
 
@@ -100,5 +100,17 @@ state inside `ui.js`, the calculation belongs in `engine.js`.
 
 Profit is deliberately hard-won. Before changing any of these, read `docs/game-design.md`:
 progressive corporate tax, corporate overhead that scales with business count, daily upkeep
-on every upgrade level, wage inflation tied to company value, same-type market saturation,
-and a valuation multiple applied to *after-tax* profit.
+on every upgrade level, wage inflation and staff turnover tied to company value, same-type
+market saturation, reputation that drifts back to 50, a valuation multiple applied to
+*after-tax* profit, 90-day loan terms with margin calls, a year-end levy, rivals that expand
+into your sectors and run price wars, and a stock market with spreads, slumps and busts.
+The two constants that decide the win rate more than any other are `ECONOMY.competition`
+and the margin-call rules (`marginHeadroom`, `marginCashFloor`); the sim proved everything
+else is survivable on its own.
+
+## Persistent state
+
+`market_mayhem_save_v1` is the run. `market_mayhem_meta_v1` is the Legacy: IPO count, points,
+perks, recent runs and Daily Sprint bests. `Game.loadMeta()` / `Game.saveMeta()` own it, and
+`Game.newGame({ meta, challenge })` applies perks and seeds the RNG for a sprint. All engine
+randomness goes through `rand()`, never `Math.random`, so a seeded run stays reproducible.

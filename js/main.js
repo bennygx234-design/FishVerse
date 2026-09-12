@@ -8,6 +8,7 @@
 
   const game = new Game();
   window.MM = { game, UI }; // handy for debugging / testing
+  let meta = Game.loadMeta();
 
   // ---------- loop state ---------------------------------------------------------
   let speed = 1, paused = false, acc = 0, last = performance.now(), running = false;
@@ -43,7 +44,7 @@
     try {
       if (running) {
         const S = game.S;
-        if (S && !paused && speed > 0 && !S.flags.bankrupt) {
+        if (S && !paused && speed > 0 && !S.flags.bankrupt && !S.flags.sprintDone) {
           acc += Math.min(250, now - last);
           const interval = MS_PER_DAY / speed;
           let guard = 0;
@@ -51,7 +52,7 @@
             acc -= interval;
             try { const tt = performance.now(); game.tick(); stats.tickMs = performance.now() - tt; }
             catch (err) { setSpeed(0); UI.updateSpeedButtons(); reportError(err, true); break; }
-            if (S.events.pending || S.flags.bankrupt || (S.flags.won && !S.flags.continued)) { acc = 0; break; }
+            if (S.events.pending || S.flags.bankrupt || S.flags.sprintDone || (S.flags.won && !S.flags.continued)) { acc = 0; break; }
           }
         }
         UI.frame(now);
@@ -80,12 +81,24 @@
   const hooks = {
     setSpeed, getSpeed: () => (paused ? 0 : speed), pause, isPaused: () => paused,
     save: () => game.save(!paused),
-    newGame: () => { Game.clearSave(); showStart(); },
+    // opts.daily starts a fresh Daily Sprint straight away; otherwise back to the start screen.
+    newGame: (opts = {}) => { Game.clearSave(); if (opts.daily) startGame(false, { daily: true }); else showStart(); },
+    meta: () => meta,
+    buyPerk: id => { const r = Game.buyPerk(meta, id); renderLegacyLine(); return r; },
+    goPublic: () => { const r = game.goPublic(meta); if (r.ok) { Game.clearSave(); renderLegacyLine(); } return r; },
+    recordRun: () => { game.recordRun(meta); renderLegacyLine(); return meta; },
+    copyText: text => { try { navigator.clipboard.writeText(text); } catch (e) { /* ignore */ } },
   };
 
   // ---------- start screen ------------------------------------------------------
   let difficulty = 'normal';
   let bgAnim = null;
+  function renderLegacyLine() {
+    const el = $('#legacyLine'); if (!el) return;
+    const today = Game.todayKey();
+    const best = meta.daily[today];
+    el.textContent = `${meta.level ? `${meta.level} IPO${meta.level > 1 ? 's' : ''} · ` : ''}${meta.points} legacy pt${meta.points === 1 ? '' : 's'}${best ? ` · today's sprint best ${game.fmt(best.valuation)}` : ''}`;
+  }
   function showStart() {
     running = false; paused = true;
     $('#app').classList.add('hidden');
@@ -93,10 +106,11 @@
     UI.Modal.close();
     const save = Game.peekSave();
     const cont = $('#btnContinue');
-    if (save && save.version === 1 && !save.flags.bankrupt) { cont.classList.remove('hidden'); cont.innerHTML = `${window.MM_ICONS('refresh', 17)}<span>Continue · ${save.company}</span>`; cont.title = `Day ${save.day}`; }
+    if (save && save.version === 1 && !save.flags.bankrupt && !save.flags.sprintDone) { cont.classList.remove('hidden'); cont.innerHTML = `${window.MM_ICONS('refresh', 17)}<span>Continue · ${save.company}</span>`; cont.title = `Day ${save.day}`; }
     else cont.classList.add('hidden');
     if (!$('#companyInput').value) $('#companyInput').value = randomName();
     renderDiff();
+    renderLegacyLine();
     const c = $('#bgChart');
     const tick = t => { if ($('#startScreen').classList.contains('hidden')) { bgAnim = null; return; } window.MM_CHARTS.bgLines(c, t); bgAnim = requestAnimationFrame(tick); };
     if (!bgAnim) bgAnim = requestAnimationFrame(tick);
@@ -111,18 +125,18 @@
     const b = ['& Co.', 'Holdings', 'Ventures', 'Trading', 'Group', 'Industries', 'Enterprises', 'Corp', 'Retail', 'Bros.'];
     return a[Math.floor(Math.random() * a.length)] + ' ' + b[Math.floor(Math.random() * b.length)];
   }
-  function startGame(fromSave) {
+  function startGame(fromSave, opts = {}) {
     UI.Sound.ensure();
     if (fromSave) {
       if (!game.load()) { fromSave = false; }
     }
     if (!fromSave) {
       const name = ($('#companyInput').value || 'Pixel & Co.').trim().slice(0, 24) || 'Pixel & Co.';
-      game.newGame({ company: name, difficulty });
+      game.newGame({ company: name, difficulty: opts.daily ? 'normal' : difficulty, meta, challenge: opts.daily ? Game.todayKey() : null });
     }
     $('#startScreen').classList.add('hidden');
     $('#app').classList.remove('hidden');
-    UI.detailBiz = null; UI.view = 'dashboard'; UI.structKey = '';
+    UI.detailBiz = null; UI.view = 'dashboard'; UI.structKey = ''; UI.attentionKeyRendered = '';
     UI.rebuildFeed();
     UI.showView('dashboard');
     running = true; paused = false; speed = 1; acc = 0; last = performance.now();
@@ -133,9 +147,11 @@
       if (r && r.days > 0) { UI.showOffline(r); }
       UI.toast({ icon: '🎉', title: `Welcome back, ${game.S.company}`, desc: `Day ${game.S.day}. The markets missed you.`, ttl: 4000 });
       if (game.S.events.pending) { const def = D.EVENTS.find(e => e.id === game.S.events.pending.id); UI.showChoice({ def, param: game.S.events.pending.param, desc: game.S.events.pending.desc }); }
+    } else if (opts.daily) {
+      UI.toast({ icon: '⏱️', title: `${D.DAILY.name} · ${game.S.challenge}`, desc: `Same markets for everyone today. Highest company value on day ${D.DAILY.days} wins.`, kind: 'gold', ttl: 8000 });
     } else {
       UI.toast({ icon: '🏪', title: `Welcome, ${game.S.company}`, desc: 'Your corner store is open. Keep shelves full, hire smart, and grow.', kind: 'good', ttl: 7000 });
-      setTimeout(() => UI.toast({ icon: '💡', title: 'First steps', desc: 'Open Businesses → Corner Store to restock, then visit the Bank for growth capital.', ttl: 9000 }), 2500);
+      setTimeout(() => UI.toast({ icon: '💡', title: 'First steps', desc: 'The dashboard tells you what needs attention. Open Businesses → Corner Store to restock, then visit the Bank.', ttl: 9000 }), 2500);
     }
     game.save(true);
   }
@@ -162,7 +178,10 @@
 
   // ---------- boot ------------------------------------------------------------------
   UI.init(game, hooks);
-  $('#btnNewGame').addEventListener('click', () => { UI.Sound.play('click'); if (Game.hasSave()) { UI.Modal.open({ title: 'Overwrite saved game?', icon: '⚠️', body: '<p>Starting a new game deletes your saved company.</p>', actions: [{ label: 'Cancel' }, { label: 'Start new game', cls: 'danger', fn: () => { Game.clearSave(); startGame(false); } }] }); } else startGame(false); });
+  const confirmOverwrite = fn => { if (Game.hasSave()) UI.Modal.open({ title: 'Overwrite saved game?', icon: '⚠️', body: '<p>Starting a new game deletes your saved company.</p>', actions: [{ label: 'Cancel' }, { label: 'Start new game', cls: 'danger', fn: () => { Game.clearSave(); fn(); } }] }); else fn(); };
+  $('#btnNewGame').addEventListener('click', () => { UI.Sound.play('click'); confirmOverwrite(() => startGame(false)); });
+  $('#btnDaily').addEventListener('click', () => { UI.Sound.play('click'); confirmOverwrite(() => startGame(false, { daily: true })); });
+  $('#btnLegacy').addEventListener('click', () => { UI.Sound.play('click'); UI.showLegacy(); });
   $('#btnContinue').addEventListener('click', () => { UI.Sound.play('click'); startGame(true); });
   $('#companyInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('#btnNewGame').click(); });
   showStart();

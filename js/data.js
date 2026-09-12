@@ -234,7 +234,11 @@
     { id: 'tax_audit',    kind: 'bad',     icon: '🧾', title: 'Tax Audit',             w: 4, dur: 0,  minDay: 60, desc: 'The tax office found "irregularities". You pay 8% of your cash.',
       instant: { cashPct: -0.08 } },
     { id: 'rate_hike',    kind: 'bad',     icon: '🏦', title: 'Interest Rate Hike',    w: 5, dur: 30, minDay: 15, desc: 'The central bank raises rates. Borrowing gets pricey.',
-      fx: { rate: 1.5, sentiment: -0.05 } },
+      fx: { rate: 1.6, sentiment: -0.05 } },
+    { id: 'rate_shock',   kind: 'bad',     icon: '🚨', title: 'Credit Crunch',         w: 2, dur: 20, minDay: 120, desc: 'Lenders panic. Interest triples and credit lines shrink.',
+      fx: { rate: 3.0, sentiment: -0.12, credit: 0.8 } },
+    { id: 'poaching',     kind: 'bad',     icon: '🎯', title: 'Talent Raid',           w: 4, dur: 0,  minDay: 60, desc: 'A rival poached staff from {biz}. A third of the team walked out.', pickBiz: true,
+      instant: { staffLossPct: 0.34 } },
     { id: 'rate_cut',     kind: 'good',    icon: '🏦', title: 'Interest Rate Cut',     w: 5, dur: 30, minDay: 15, desc: 'Cheap money! Loan interest drops.',
       fx: { rate: 0.6, sentiment: 0.05 } },
     { id: 'health_scare', kind: 'bad',     icon: '🤒', title: 'Health Scare',          w: 5, dur: 8,  desc: 'People avoid eating out. Pharmacies are busy.',
@@ -314,7 +318,56 @@
         { label: 'Fund the blitz', instant: { payFee: true }, fx: { demand: { product: 2.2 } }, dur: 10, msg: '{product} demand doubles for 10 days!' },
         { label: 'Ignore', msg: 'You ignored the tip.' },
       ] },
+    // Triggered by the engine (never picked at random): a bigger rival wants you gone.
+    { id: 'hostile_bid', kind: 'choice', icon: '🦈', title: 'Hostile Takeover Bid', w: 0, minDay: 90, special: true,
+      desc: '{rival} offers {fee} in cash for your entire company — 30% above what the market says you are worth. Take the money and walk away, or fight and face a 30-day raid on your customers.',
+      choices: [
+        { label: 'Sell the company', instant: { sellOut: true }, msg: 'You sold out to {rival}.' },
+        { label: 'Fight them', fx: { competition: 1.5, sentiment: -0.1 }, dur: 30, msg: '{rival} launches a raid. Competition is fierce for 30 days.' },
+      ] },
   ];
+
+  // ---------- SEASONS ------------------------------------------------------------
+  // A year is 360 days. Each quarter tilts demand and costs; Q4 is the rush that
+  // every retailer lives for, and tax day lands at the end of it.
+  const SEASONS = [
+    { id: 'winter', name: 'Winter', icon: '❄️', months: [1, 2, 3],    demandCat: { food: 1.1, drink: 0.85, pharma: 1.15 }, costAll: 1.0,  blurb: 'Comfort food and cold medicine. Drinks slump.' },
+    { id: 'spring', name: 'Spring', icon: '🌱', months: [4, 5, 6],    demandCat: { retail: 1.15, auto: 1.15 },              costAll: 1.0,  blurb: 'Wardrobes and cars get refreshed.' },
+    { id: 'summer', name: 'Summer', icon: '☀️', months: [7, 8, 9],    demandCat: { drink: 1.3, aero: 1.1 },                 costAll: 1.0,  blurb: 'Everyone is thirsty.' },
+    { id: 'q4',     name: 'Q4 Rush', icon: '🎄', months: [10, 11, 12], demandCat: { retail: 1.35, tech: 1.3, food: 1.15, drink: 1.1 }, costAll: 1.08, blurb: 'The holiday rush. Demand soars, suppliers charge for it, and tax day is coming.' },
+  ];
+
+  // ---------- TIMED OFFERS -------------------------------------------------------
+  // Offers do not pause the game. They sit on the dashboard with a countdown and
+  // vanish when it hits zero. Fees scale to the player's stage.
+  const OFFER_TEMPLATES = [
+    { id: 'distressed', icon: '🏚️', title: 'Distressed sale', w: 5, days: 5, minDay: 20,
+      desc: 'A failing {type} is on the block for {fee} — about half of what a new one costs. Reputation is shot and the shelves are empty, but it is yours in a day.' },
+    { id: 'bulk_lot', icon: '📦', title: 'Bulk lot expiring tonight', w: 6, days: 2, minDay: 10,
+      desc: 'A wholesaler is dumping {qty} units of {product} at {fee} — 40% under market. Storage permitting, it lands at {biz}.' },
+    { id: 'block_trade', icon: '📉', title: 'Block trade', w: 4, days: 3, minDay: 40,
+      desc: 'A fund is unloading {rival} stock at a 25% discount. Minimum ticket {fee}.' },
+    { id: 'star_manager', icon: '🌟', title: 'Star manager available', w: 4, days: 4, minDay: 30,
+      desc: 'A veteran operator will run {biz} for a {fee} signing bonus: +15% throughput and productivity, permanently.' },
+  ];
+
+  // ---------- PRESTIGE (Go Public) ---------------------------------------------------
+  // Winning lets you float the company. You keep Legacy points to spend on perks and
+  // start again from $1,000 with a harder target. Everything here persists across runs.
+  const PRESTIGE = {
+    targetGrowth: 2,        // win target doubles per IPO
+    taxPerLevel: 0.04,      // tax rate x (1 + 0.04 per IPO)
+    rivalPerLevel: 0.06,    // rival growth x (1 + 0.06 per IPO)
+    perks: {
+      seed:     { name: 'Seed Capital',     icon: '💰', max: 3, cost: 1, desc: '+$2,500 starting cash per level.' },
+      analytics:{ name: 'Founder Insight',  icon: '📊', max: 1, cost: 2, desc: 'Start every run with the Analytics Suite.' },
+      credit:   { name: 'Investor Network', icon: '🤝', max: 2, cost: 1, desc: '+15% credit limit per level.' },
+      launch:   { name: 'Launch Discount',  icon: '🏷️', max: 2, cost: 1, desc: 'New businesses cost 10% less per level for the first 200 days.' },
+      shield:   { name: 'Crisis Playbook',  icon: '🛡️', max: 1, cost: 2, desc: 'The first margin call and the first hostile bid of a run are waived.' },
+    },
+  };
+
+  const DAILY = { days: 180, name: 'Daily Sprint' };
 
   // ---------- QUESTS (rotating objectives) ---------------------------------------
   // Each quest template generates a concrete goal scaled to the player's stage.
@@ -358,6 +411,12 @@
     { id: 'quests_10',    icon: '📜', name: 'Overachiever',        desc: 'Complete 10 quests.',                       check: s => s.stats.questsDone >= 10, bonus: 4000 },
     { id: 'year_one',     icon: '📅', name: 'Anniversary',         desc: 'Survive one full year (360 days).',         check: s => s.day >= 360, bonus: 4000 },
     { id: 'all_types',    icon: '🧩', name: 'Diversified',         desc: 'Own every type of business.',               check: s => new Set(s.businesses.map(b => b.type)).size >= TYPE_ORDER.length, bonus: 900000 },
+    { id: 'close_call',   icon: '😅', name: 'Cutting It Close',    desc: 'Run under 2 days of cash for 3 days and recover.', check: s => s.stats.closeCalls > 0, bonus: 2500 },
+    { id: 'price_war',    icon: '🛡️', name: 'Held the Line',       desc: 'Come out of a rival price war with rising profit.', check: s => s.stats.priceWarsWon > 0, bonus: 6000 },
+    { id: 'tax_day',      icon: '🧾', name: 'Paid in Full',        desc: 'Settle a year-end levy without going into overdraft.', check: s => s.stats.leviesPaid > 0, bonus: 3000 },
+    { id: 'offers_5',     icon: '⏱️', name: 'Deal Hunter',         desc: 'Accept 5 timed offers.',                     check: s => s.stats.offersTaken >= 5, bonus: 8000 },
+    { id: 'hostile',      icon: '🦈', name: 'Not For Sale',        desc: 'Refuse a hostile takeover bid and survive the raid.', check: s => s.stats.raidsSurvived > 0, bonus: 40000 },
+    { id: 'streak_90',    icon: '🔥', name: 'Unstoppable',         desc: 'Stay profitable 90 days in a row.',         check: s => s.stats.bestStreak >= 90, bonus: 25000 },
   ];
 
   const TIPS = [
@@ -371,12 +430,20 @@
     'Auto-restock keeps shelves full so you can focus on expansion.',
     'Loans are cheap when your return beats the interest. Debt is a tool, not a sin.',
     'Reputation multiplies traffic. Keep stock full and staff paid.',
-    'Rival stocks crash during market panics. Buy the dip.',
+    'Rival stocks can crash and even go bust. Never borrow to buy them.',
     'Each extra store of the same type shares the same customers. Franchise Program softens that.',
     'Bulk buying pushes wholesale prices up. A Freight Network softens the blow.',
     'Wages drift up as your company grows. HR and Benefits keep the bill down.',
     'Tax Strategy in the Finance department cuts your rate by 4 points per level.',
     'Perishables spoil daily. Cold Chain pays for itself in a busy food business.',
+    'Loans come due after 90 days. Keep cash for the balloon payment or refinance early.',
+    'If your debt outgrows your credit line for 3 days the bank calls the difference. Watch the Bank view.',
+    'Reputation drifts back to 50 unless you earn it: full shelves, enough staff, fair prices.',
+    'Staff quit when underpaid. A raise is cheaper than five days of training a replacement.',
+    'Year-end levy: 3% of company value is due on day 360. Save for it.',
+    'Rivals in a price war steal your customers unless your prices are at or below fair.',
+    'Timed offers expire whether or not you are watching. Distressed sales are the cheapest way to expand.',
+    'Subsidiaries decay unless you reinvest in them. Check Headquarters.',
     'Press SPACE to pause and 1-4 to change speed.',
   ];
 
@@ -402,16 +469,69 @@
     overheadBase: 0.30,
     overheadPerBiz: 0.026,
     overheadMax: 1.15,
-    // Wages drift up as the company grows and competes for talent.
-    wageInflation: 0.075,
+    // Wages drift up as the company grows and competes for talent. Two terms so the
+    // curve steepens late: a $1B company pays roughly 1.9x the wage of a corner shop.
+    wageInflation: 0.14,
+    wageInflation2: 0.012,
+    // Staff turnover per employee per day at market wage; pay above market to keep them.
+    turnover: 0.004,
+    traineeDays: 5,          // new hires work below speed for this long
+    traineeSpeed: 0.7,
     // Each extra business of the same type eats into the others' customers.
     saturation: 0.86,
     bizCostGrowth: 1.40,
     spoilRate: 0.045,
+    // Reputation drifts toward 50 and must be earned above it. Gouging starts here.
+    repGougeAt: 1.15,
+    // Valuation: goodwill multiple on after-tax daily profit, and how low panic can go.
+    multiple: 55,
+    sentimentMin: 0.35,
+    // Credit: goodwill can back at most this share of tangible net assets; shares are
+    // haircut as collateral; loans balloon after a fixed term; excess debt is called.
+    goodwillCreditCap: 0.6,
+    shareCollateral: 0.5,
+    loanTerm: 90,
+    loanAmortDays: 30,        // principal is collected over this many days after the term
+    marginCallDays: 3,
+    marginHeadroom: 1.3,      // debt may exceed the line by this much before a call
+    marginCashFloor: 3,       // a call never takes the last N days of operating cash
+    marginPenalty: 0.001,     // extra daily interest on all debt while in breach
+    // Rival stock market: bid-ask spread instead of a token fee; drift and crash odds.
+    tradeSpread: 0.03,
+    rivalDrift: 0.85,         // scales the rivals' base growth rates
+    rivalSlumpChance: 0.002,  // per rival per day: enter a slump of 20-60 days
+    rivalSlumpDrag: 0.006,    // extra daily loss while slumping
+    rivalBustChance: 0.0006,  // per rival per day: a crash of 30-60% (small rivals can fold)
+    // Acquisitions: pay a real premium, absorb integration costs, then reinvest or decay.
+    acquirePremium: 2.0,
+    integrationDays: 60,
+    integrationCost: 0.0015,  // of value, per day, during integration
+    subIncome: 0.003,         // of value x health, per day, after integration
+    subDecay: 0.004,          // health lost per day
+    subInvestCost: 0.05,      // of value, restores health to 1
+    // Competition: rivals push harder, run price wars and expand into your sectors.
+    competition: 0.105,
+    priceWarPenalty: 0.78,
+    priceWarMatch: 0.97,
+    priceWarChance: 0.0025,
+    priceWarCooldown: 45,     // days a rival waits after a war before starting another
+    rivalExpandChance: 0.003,
+    hostileBidChance: 0.003,
+    // Calendar.
+    annualLevy: 0.03,         // of company value, due on day 360 of each year
+    // Timed offers.
+    offerChance: 0.03,
+    maxOffers: 2,
+    // Streak multiplier on the valuation multiple, and the sentiment hit when it breaks.
+    streakMax: 0.2,
+    streakDays: 150,
+    streakBreak: 0.03,
+    closeCallBonus: 0.02,
   };
 
   const DATA = { PRODUCTS, CATEGORIES, BUSINESS_TYPES, TYPE_ORDER, UPGRADES, UPGRADE_BRANCHES, HQ_UPGRADES, HQ_DEPTS,
     COMPETITORS, EVENTS, QUEST_TEMPLATES, ACHIEVEMENTS, TIPS, DIFFICULTY, TAX_BRACKETS, ECONOMY,
+    SEASONS, OFFER_TEMPLATES, PRESTIGE, DAILY,
     WIN_VALUE: 1e9, START_CASH: 1000, SHARES: 1000000 };
 
   root.MM_DATA = DATA;

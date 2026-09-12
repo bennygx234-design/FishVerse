@@ -94,7 +94,12 @@ easiest thing to get wrong when adding a view.
 
 `localStorage` under `market_mayhem_save_v1`. Autosave every 5 days, on visibility change
 and on unload. On load the game replays up to 20 missed days offline, capped and stopped if
-cash goes negative.
+cash goes negative, and spawns one timed offer so there is a decision waiting.
+
+The Legacy (IPO count, points, perks, recent runs, Daily Sprint bests) lives separately
+under `market_mayhem_meta_v1` and survives new games. `main.js` loads it once, passes it to
+`Game.newGame({ meta })` so perks apply, and hands it to the UI through hooks (`meta`,
+`buyPerk`, `goPublic`, `recordRun`).
 
 `Game.load()` is defensive by design, because save files outlive schema changes. It:
 

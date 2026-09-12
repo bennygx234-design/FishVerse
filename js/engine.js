@@ -4,19 +4,31 @@
 (function (root) {
   'use strict';
   const D = root.MM_DATA || (typeof require !== 'undefined' ? require('./data.js') : null);
-  const { PRODUCTS, BUSINESS_TYPES, TYPE_ORDER, UPGRADES, HQ_UPGRADES, COMPETITORS, EVENTS, QUEST_TEMPLATES, ACHIEVEMENTS, DIFFICULTY, ECONOMY, TAX_BRACKETS } = D;
+  const { PRODUCTS, BUSINESS_TYPES, TYPE_ORDER, UPGRADES, HQ_UPGRADES, COMPETITORS, EVENTS, QUEST_TEMPLATES, ACHIEVEMENTS, DIFFICULTY, ECONOMY, TAX_BRACKETS, SEASONS, OFFER_TEMPLATES, PRESTIGE, DAILY } = D;
 
   // ---------- helpers ---------------------------------------------------------
+  // Randomness goes through rand() so a seeded run (the Daily Sprint) is reproducible.
+  // rngState === null means plain Math.random.
+  let rngState = null;
+  function rand() {
+    if (rngState === null) return Math.random();
+    rngState = (rngState + 0x6D2B79F5) | 0;
+    let t = rngState;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
+  function hashSeed(str) { let h = 2166136261; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return h | 0; }
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-  const rnd = (a = 0, b = 1) => a + Math.random() * (b - a);
-  const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+  const rnd = (a = 0, b = 1) => a + rand() * (b - a);
+  const pick = arr => arr[Math.floor(rand() * arr.length)];
   function gauss() { // standard normal (Box-Muller)
     let u = 0, v = 0;
-    while (u === 0) u = Math.random();
-    while (v === 0) v = Math.random();
+    while (u === 0) u = rand();
+    while (v === 0) v = rand();
     return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
   }
-  const stochRound = x => { const f = Math.floor(x); return f + (Math.random() < x - f ? 1 : 0); };
+  const stochRound = x => { const f = Math.floor(x); return f + (rand() < x - f ? 1 : 0); };
   function niceRound(x) { // round to a "nice" number for targets: 1, 2, 2.5, 5 x 10^n
     if (x <= 0) return 0;
     const p = Math.pow(10, Math.floor(Math.log10(x)));
@@ -32,12 +44,14 @@
   }
   function weightedPick(items, wfn) {
     let total = 0; for (const it of items) total += wfn(it);
-    let r = Math.random() * total;
+    let r = rand() * total;
     for (const it of items) { r -= wfn(it); if (r <= 0) return it; }
     return items[items.length - 1];
   }
 
   const SAVE_KEY = 'market_mayhem_save_v1';
+  const META_KEY = 'market_mayhem_meta_v1';
+  const DAYS_PER_YEAR = 360;
   const MAX_ACTIVE_EVENTS = 3;
   const MAX_LOANS = 5;
   const BASE_RATE = 0.001;        // 0.1% per day
@@ -64,7 +78,13 @@
     }
 
     // ---------- new game --------------------------------------------------------
-    newGame({ company = 'Pixel & Co.', difficulty = 'normal' } = {}) {
+    // meta: the persistent Legacy record (see Game.loadMeta). challenge: a date string
+    // for the Daily Sprint; the run is then seeded and ends after DAILY.days.
+    newGame({ company = 'Pixel & Co.', difficulty = 'normal', meta = null, challenge = null } = {}) {
+      const perks = Object.assign({ seed: 0, analytics: 0, credit: 0, launch: 0, shield: 0 }, meta && meta.perks ? meta.perks : {});
+      const prestige = challenge ? 0 : (meta && meta.level) || 0;
+      const seed = challenge ? hashSeed('mm-daily-' + challenge) : null;
+      rngState = seed;
       const market = {};
       for (const pid in PRODUCTS) {
         const p = PRODUCTS[pid];
@@ -74,7 +94,7 @@
         version: 1,
         company, difficulty,
         day: 0,
-        cash: D.START_CASH,
+        cash: D.START_CASH + (challenge ? 0 : perks.seed * 2500),
         businesses: [],
         nextBizId: 1,
         market,
@@ -82,27 +102,34 @@
         hq: {},
         events: { active: [], pending: null },
         eventLog: [],
-        competitors: COMPETITORS.map(c => ({ id: c.id, value: c.value * rnd(0.8, 1.25), history: [], acquired: false, strength: 1, lastRank: 0 })),
+        competitors: COMPETITORS.map(c => ({ id: c.id, value: c.value * rnd(0.8, 1.25), history: [], acquired: false, strength: 1, lastRank: 0,
+          extraTypes: [], slump: 0, priceWar: 0, priceWarType: null, warCooldown: 0, bust: false })),
         portfolio: {},
         subsidiaries: [],
+        offers: [], nextOfferId: 1,
         sentiment: 1.0,
         jitter: 0,
         valuation: 0, sharePrice: 0, netAssets: 0, goodwill: 0, multiple: 0,
         ema7: 0, ema30: 0,
         history: { valuation: [], cash: [], revenue: [], profit: [], debt: [], rank: [] },
-        streak: 0, overdraftDays: 0, taxLossCarry: 0, econ: 2,
+        streak: 0, overdraftDays: 0, taxLossCarry: 0, econ: 3,
+        marginDays: 0, lowRunwayDays: 0, waived: { margin: false, hostile: false },
+        prestige, winValue: D.WIN_VALUE * Math.pow(PRESTIGE.targetGrowth, prestige), perks: challenge ? { seed: 0, analytics: 0, credit: 0, launch: 0, shield: 0 } : perks,
+        seed, rngState: seed, challenge, year: { startValue: 0, startProfit: 0, levy: 0 },
         quests: [], questCooldown: 0,
         achievements: {},
         unlocked: {},
         stats: { unitsSold: 0, totalRevenue: 0, totalProfit: 0, loansTaken: 0, loansRepaid: 0, maxStaff: 0, recessionsSurvived: 0,
           rivalsBeaten: 0, reachedRank1: false, acquisitions: 0, biggestSale: 0, tradingProfit: 0, bestStreak: 0, questsDone: 0,
-          upgradesBought: 0, eventsSeen: 0, unitsByProduct: {}, peakValue: 0, bizBought: 0, taxPaid: 0 },
-        flags: { won: false, bankrupt: false, tutorial: 0, continued: false },
+          upgradesBought: 0, eventsSeen: 0, unitsByProduct: {}, peakValue: 0, bizBought: 0, taxPaid: 0,
+          closeCalls: 0, priceWarsWon: 0, leviesPaid: 0, offersTaken: 0, raidsSurvived: 0, bestDayProfit: 0, milestones: {}, marginCalls: 0, staffQuit: 0, levyTotal: 0 },
+        flags: { won: false, bankrupt: false, tutorial: 0, continued: false, soldOut: false, sprintDone: false },
         lastDay: { revenue: 0, cogs: 0, wages: 0, rent: 0, marketing: 0, overhead: 0, upkeep: 0, hqUpkeep: 0, interest: 0, tax: 0, other: 0, pretax: 0, profit: 0, units: 0, subsidiaries: 0 },
         rank: 0,
         savedAt: Date.now(),
       };
       for (const k in HQ_UPGRADES) S.hq[k] = 0;
+      if (S.perks.analytics) S.hq.analytics = 1;
       for (const pid in market) market[pid].history.push(market[pid].cost);
       for (const c of S.competitors) c.history.push(c.value);
       // Starter store with two days of stock so day one already sells something.
@@ -116,10 +143,59 @@
       S.businesses.push(biz);
       for (const t in BUSINESS_TYPES) if (BUSINESS_TYPES[t].unlock <= 0) S.unlocked[t] = true;
       this._computeValuation();
+      S.year.startValue = S.valuation;
+      S.rank = this.ranking().find(r => r.you).rank;
       this._pushHistory();
       while (S.quests.length < 3) { const q = this._generateQuest(); if (!q) break; S.quests.push(q); }
-      this.log('🏪', `${company} opens its first Corner Store with $1,000.`, 'good');
+      this.log('🏪', `${company} opens its first Corner Store with ${this.fmt(S.cash)}.`, 'good');
+      if (prestige) this.log('🏛️', `IPO #${prestige} legacy: the target is now ${this.fmt(S.winValue)}, tax and rivals are tougher.`, 'neutral');
+      if (challenge) this.log('⏱️', `${DAILY.name} ${challenge}: maximise company value by day ${DAILY.days}.`, 'neutral');
+      S.rngState = rngState;
       return S;
+    }
+    // Reproducible daily seed: everyone playing the same date gets the same markets.
+    static todayKey(d = new Date()) { return d.toISOString().slice(0, 10); }
+    static loadMeta() {
+      const base = { level: 0, points: 0, perks: { seed: 0, analytics: 0, credit: 0, launch: 0, shield: 0 }, runs: [], daily: {}, bestDay: null };
+      try { const m = JSON.parse(root.localStorage.getItem(META_KEY)); if (m && typeof m === 'object') { const out = Object.assign(base, m); out.perks = Object.assign(base.perks, m.perks || {}); out.daily = m.daily || {}; out.runs = Array.isArray(m.runs) ? m.runs : []; return out; } } catch (e) { /* ignore */ }
+      return base;
+    }
+    static saveMeta(meta) { try { root.localStorage && root.localStorage.setItem(META_KEY, JSON.stringify(meta)); } catch (e) { /* ignore */ } }
+    static buyPerk(meta, id) {
+      const P = PRESTIGE.perks[id]; if (!P) return { ok: false, msg: 'Unknown perk.' };
+      if ((meta.perks[id] || 0) >= P.max) return { ok: false, msg: 'Already at max level.' };
+      if (meta.points < P.cost) return { ok: false, msg: `Needs ${P.cost} legacy point${P.cost > 1 ? 's' : ''}.` };
+      meta.points -= P.cost; meta.perks[id] = (meta.perks[id] || 0) + 1; Game.saveMeta(meta);
+      return { ok: true };
+    }
+    // Run summary, used by the win / bankrupt / sprint screens and recorded to the legacy.
+    runSummary() {
+      const S = this.S;
+      return { company: S.company, difficulty: S.difficulty, day: S.day, valuation: S.valuation, peak: S.stats.peakValue, businesses: S.businesses.length,
+        profit: S.stats.totalProfit, bestDay: S.stats.bestDayProfit, milestones: Object.assign({}, S.stats.milestones), achievements: Object.keys(S.achievements).length,
+        rank: S.rank, prestige: S.prestige, won: S.flags.won, bankrupt: S.flags.bankrupt, soldOut: S.flags.soldOut, challenge: S.challenge, taxPaid: S.stats.taxPaid, at: Date.now() };
+    }
+    // Float the company. Points scale with speed and difficulty; the next run is harder.
+    goPublic(meta) {
+      const S = this.S;
+      if (!S.flags.won || S.challenge) return { ok: false, msg: 'Only a winning run can go public.' };
+      let points = 2;
+      if (S.day <= 900) points += 2; else if (S.day <= 1300) points += 1;
+      if (S.difficulty === 'hard') points += 2; else if (S.difficulty === 'easy') points -= 1;
+      if (S.flags.soldOut) points = Math.max(1, points - 1);
+      points = Math.max(1, points);
+      meta.level = (meta.level || 0) + 1; meta.points = (meta.points || 0) + points;
+      meta.runs.unshift(Object.assign(this.runSummary(), { points })); if (meta.runs.length > 20) meta.runs.length = 20;
+      Game.saveMeta(meta);
+      return { ok: true, points, level: meta.level };
+    }
+    recordRun(meta) {
+      const S = this.S;
+      const sum = this.runSummary();
+      if (S.challenge) { const prev = meta.daily[S.challenge]; if (!prev || sum.valuation > prev.valuation) meta.daily[S.challenge] = { valuation: sum.valuation, day: sum.day, company: S.company }; if (!meta.bestDay || sum.valuation > meta.bestDay.valuation) meta.bestDay = { valuation: sum.valuation, date: S.challenge }; }
+      else { meta.runs.unshift(sum); if (meta.runs.length > 20) meta.runs.length = 20; }
+      Game.saveMeta(meta);
+      return sum;
     }
 
     _makeBusiness(type, paid) {
@@ -130,6 +206,7 @@
         id: S.nextBizId++, type, name: count ? `${T.name} #${count + 1}` : T.name,
         paid, upgradesPaid: 0,
         staff: T.staff, wageMult: 1.0, marketing: 0, rep: 50,
+        trainees: [], manager: false,
         autoRestock: false, stockDays: 4, autoPrice: false,
         stock: {}, avgCost: {}, prices: {}, upgrades: {},
         last: { revenue: 0, cogs: 0, wages: 0, rent: 0, marketing: 0, overhead: 0, upkeep: 0, pretax: 0, tax: 0, net: 0, profit: 0, sold: {}, expected: {}, lostStock: 0, lostStaff: 0, serviceRatio: 1, units: 0, spoiled: 0 },
@@ -186,21 +263,45 @@
     }
     productivity(biz, fx) {
       return clamp(0.5 + 0.5 * biz.wageMult, 0.7, 1.3)
-        * (1 + this.bizEff(biz, 'productivity') + this.hqEff('productivity'))
+        * (1 + this.bizEff(biz, 'productivity') + this.hqEff('productivity') + (biz.manager ? 0.15 : 0))
         * (fx ? fx.productivity : 1);
     }
+    traineeCount(biz) { let n = 0; for (const t of (biz.trainees || [])) n += t.n; return n; }
+    // Staff in training work below speed, so a fresh hire is not instant capacity.
+    effectiveStaff(biz) { return Math.max(0, biz.staff - (1 - ECONOMY.traineeSpeed) * this.traineeCount(biz)); }
     throughput(biz, fx) {
       const T = BUSINESS_TYPES[biz.type];
-      const auto = 1 + this.bizEff(biz, 'throughput');
+      const auto = (1 + this.bizEff(biz, 'throughput')) * (biz.manager ? 1.15 : 1);
       if (biz.staff <= 0) return 0.25 * T.staffCap * auto;
-      return biz.staff * T.staffCap * this.productivity(biz, fx) * auto;
+      return this.effectiveStaff(biz) * T.staffCap * this.productivity(biz, fx) * auto;
     }
-    // Talent gets pricier as the company grows and competes for it.
+    // Talent gets pricier as the company grows and competes for it. The curve steepens
+    // late so payroll is a real bill for a billion-dollar company.
     wageIndex() {
       const v = Math.max(1, this.S.valuation / 20000);
-      const soften = 1 + this.hqEff('wageInflation');
-      return 1 + ECONOMY.wageInflation * Math.log10(v) * clamp(soften, 0.4, 1);
+      const soften = clamp(1 + this.hqEff('wageInflation'), 0.4, 1);
+      const l = Math.log10(v);
+      return 1 + (ECONOMY.wageInflation * l + ECONOMY.wageInflation2 * l * l) * soften;
     }
+    // Daily chance that one employee quits. Paying above market keeps people.
+    quitRate(biz) {
+      const soften = clamp(1 + this.hqEff('wageInflation'), 0.4, 1);
+      return Math.max(0, ECONOMY.turnover * (1.35 - biz.wageMult)) * soften * (biz.rep < 30 ? 1.5 : 1);
+    }
+    // Days of fixed costs the cash pile covers. The number to watch.
+    runway() {
+      const S = this.S;
+      const daily = this._dailyFixedCosts(this._fx || this.activeEffects());
+      if (S.cash <= 0) return 0;
+      return daily > 0 ? S.cash / daily : Infinity;
+    }
+    season(day = this.S.day) {
+      const m = Math.floor(((Math.max(1, day) - 1) % DAYS_PER_YEAR) / 30) + 1;
+      return SEASONS.find(s => s.months.includes(m)) || SEASONS[0];
+    }
+    yearDay(day = this.S.day) { return ((Math.max(1, day) - 1) % DAYS_PER_YEAR) + 1; }
+    daysToLevy() { return DAYS_PER_YEAR - this.yearDay(); }
+    levyDue() { return Math.round(this.S.valuation * ECONOMY.annualLevy); }
     dailyWage(biz, fx) {
       const T = BUSINESS_TYPES[biz.type];
       const eff = clamp(1 + this.hqEff('wages') + this.bizEff(biz, 'wages'), 0.45, 1.4);
@@ -235,21 +336,32 @@
       const avg = Math.max(0, this.S.ema30);
       let rate = TAX_BRACKETS[TAX_BRACKETS.length - 1].rate;
       for (const b of TAX_BRACKETS) if (avg <= b.upTo) { rate = b.rate; break; }
-      return clamp((rate - this.hqEff('taxCut')) * this.diff().tax, 0, 0.45);
+      const legacy = 1 + PRESTIGE.taxPerLevel * (this.S.prestige || 0);
+      return clamp((rate - this.hqEff('taxCut')) * this.diff().tax * legacy, 0, 0.5);
     }
     marketingFactor(biz) {
       const T = BUSINESS_TYPES[biz.type];
       const power = 0.4 * (1 + this.bizEff(biz, 'marketing'));
       return 1 + power * (1 - Math.exp(-biz.marketing / (T.rent * 3)));
     }
+    rivalInType(c, def, type) { return def.types[0] === '*' || def.types.includes(type) || (c.extraTypes || []).includes(type); }
     competitionFactor(type, fx) {
       let pressure = 0;
       for (let i = 0; i < COMPETITORS.length; i++) {
         const def = COMPETITORS[i], c = this.S.competitors[i];
-        if (c.acquired) continue;
-        if (def.types[0] === '*' || def.types.includes(type)) pressure += c.strength;
+        if (c.acquired || c.bust) continue;
+        if (this.rivalInType(c, def, type)) pressure += c.strength;
       }
-      return 1 / (1 + 0.09 * pressure * (fx ? fx.competition : 1));
+      return 1 / (1 + ECONOMY.competition * pressure * (fx ? fx.competition : 1));
+    }
+    // A rival running a price war in this sector takes customers unless you match.
+    priceWarIn(type) {
+      for (let i = 0; i < COMPETITORS.length; i++) { const c = this.S.competitors[i]; if (!c.acquired && !c.bust && c.priceWar > 0 && c.priceWarType === type) return { c, def: COMPETITORS[i] }; }
+      return null;
+    }
+    priceWarFactor(biz, pid) {
+      const war = this.priceWarIn(biz.type); if (!war) return 1;
+      return biz.prices[pid] / this.fairPrice(pid) <= ECONOMY.priceWarMatch ? 1 : ECONOMY.priceWarPenalty;
     }
     saturation(type) {
       const n = this.S.businesses.filter(b => b.type === type).length;
@@ -267,6 +379,7 @@
         * this.repFactor(biz.rep)
         * this.marketingFactor(biz)
         * this.competitionFactor(biz.type, fx)
+        * this.priceWarFactor(biz, pid)
         * (fx ? fx.traffic : 1)
         * diff.demand;
     }
@@ -292,8 +405,9 @@
       const T = BUSINESS_TYPES[biz.type];
       let total = 0;
       for (const pid of T.products) total += this.expectedDemand(biz, pid, biz.prices[pid], fx);
-      const per = T.staffCap * this.productivity(biz, fx) * (1 + 0.3 * biz.upgrades.automation);
-      return Math.max(1, Math.ceil(total / per));
+      const per = T.staffCap * this.productivity(biz, fx) * (1 + 0.3 * biz.upgrades.automation) * (biz.manager ? 1.15 : 1);
+      // trainees count for less, so the recommendation covers the gap while they learn
+      return Math.max(1, Math.ceil(total / per + (1 - ECONOMY.traineeSpeed) * this.traineeCount(biz)));
     }
     inventoryValue(biz) {
       let v = 0; for (const pid in biz.stock) v += biz.stock[pid] * biz.avgCost[pid];
@@ -307,7 +421,16 @@
       for (const cid in this.S.portfolio) { const c = this._comp(cid); if (c) v += this.S.portfolio[cid].shares * c.value / D.SHARES; }
       return v;
     }
-    creditLimit() { return Math.round((2500 + 0.75 * Math.max(0, this.S.netAssets) + 0.22 * this.S.goodwill) * (1 + this.hqEff('credit'))); }
+    // Credit is backed by tangible assets: shares are haircut, and goodwill can only add
+    // a capped slice on top. A credit crunch event shrinks the whole line.
+    creditLimit(fx) {
+      const S = this.S;
+      const tangible = Math.max(0, S.netAssets - this.portfolioValue() * (1 - ECONOMY.shareCollateral));
+      const goodwillPart = Math.min(0.22 * Math.max(0, S.goodwill), ECONOMY.goodwillCreditCap * tangible);
+      const f = fx || this._fx || this.activeEffects();
+      const perk = 1 + 0.15 * ((S.perks && S.perks.credit) || 0);
+      return Math.round((2500 + 0.75 * tangible + goodwillPart) * (1 + this.hqEff('credit')) * perk * (f.credit || 1));
+    }
     availableCredit() { return Math.max(0, this.creditLimit() - this.totalDebt()); }
     currentRate(fx) {
       const util = this.creditLimit() > 0 ? clamp(this.totalDebt() / this.creditLimit(), 0, 1) : 1;
@@ -315,9 +438,10 @@
       return BASE_RATE * this.diff().rate * (1 + util) * dept * (fx ? fx.rate : (this._fx ? this._fx.rate : 1));
     }
     bizCost(type) {
-      const T = BUSINESS_TYPES[type];
-      const n = this.S.businesses.filter(b => b.type === type).length;
-      return Math.round(T.cost * Math.pow(ECONOMY.bizCostGrowth, n) * clamp(1 + this.hqEff('bizCost'), 0.5, 1));
+      const S = this.S, T = BUSINESS_TYPES[type];
+      const n = S.businesses.filter(b => b.type === type).length;
+      const launch = S.day < 200 && S.perks ? 1 - 0.1 * (S.perks.launch || 0) : 1;
+      return Math.round(T.cost * Math.pow(ECONOMY.bizCostGrowth, n) * clamp(1 + this.hqEff('bizCost'), 0.5, 1) * launch);
     }
     upgradeCost(biz, uid) {
       const U = UPGRADES[uid];
@@ -345,11 +469,14 @@
     bizSaleValue(biz) { return Math.round(biz.paid * 0.55 + biz.upgradesPaid * 0.4 + this.inventoryValue(biz) * 0.5); }
     _comp(id) { const i = COMPETITORS.findIndex(c => c.id === id); return i >= 0 ? this.S.competitors[i] : null; }
     compDef(id) { return COMPETITORS.find(c => c.id === id); }
-    acquisitionPrice(id) { const c = this._comp(id); return Math.round(c.value * 1.25); }
+    acquisitionPrice(id) { const c = this._comp(id); return Math.round(c.value * ECONOMY.acquirePremium); }
     canAcquire(id) {
       const c = this._comp(id);
-      return c && !c.acquired && this.S.valuation >= c.value * 1.5 && this.S.cash >= this.acquisitionPrice(id);
+      return c && !c.acquired && !c.bust && this.S.valuation >= c.value * 1.5 && this.S.cash >= this.acquisitionPrice(id);
     }
+    subInvestCost(sub) { return Math.round(sub.value * ECONOMY.subInvestCost); }
+    // Share prices carry a spread: you buy at the ask and sell at the bid.
+    sharePrice(compId, side) { const c = this._comp(compId); const mid = c.value / D.SHARES; const half = ECONOMY.tradeSpread / 2; return side === 'buy' ? mid * (1 + half) : side === 'sell' ? mid * (1 - half) : mid; }
     bizProfitEstimate(biz) { // recent average daily profit
       const h = biz.history;
       if (!h.length) return 0;
@@ -361,9 +488,13 @@
     // ---------- active event effects ----------------------------------------------
     activeEffects() {
       const S = this.S;
-      const fx = { demandAll: 1, demandCat: {}, demandBiz: {}, demandProduct: {}, costAll: 1, costCat: {}, traffic: 1, sentiment: 0, rate: 1, wage: 1, productivity: 1, competition: 1 };
+      const fx = { demandAll: 1, demandCat: {}, demandBiz: {}, demandProduct: {}, costAll: 1, costCat: {}, traffic: 1, sentiment: 0, rate: 1, wage: 1, productivity: 1, competition: 1, credit: 1 };
       const legal = S.hq.legal ? 0.65 : 1;
       const mul = (m, soft) => soft === 1 ? m : 1 + (m - 1) * soft;
+      // the season is a standing effect
+      const season = this.season();
+      for (const c in season.demandCat) fx.demandCat[c] = season.demandCat[c];
+      fx.costAll *= season.costAll || 1;
       for (const ev of S.events.active) {
         const soft = ev.kind === 'bad' ? legal : 1;
         const f = ev.fx || {};
@@ -384,6 +515,7 @@
         if (f.wage) fx.wage *= mul(f.wage, soft);
         if (f.productivity) fx.productivity *= mul(f.productivity, soft);
         if (f.competition) fx.competition *= mul(f.competition, soft);
+        if (f.credit) fx.credit *= mul(f.credit, soft);
       }
       return fx;
     }
@@ -438,7 +570,10 @@
     }
     hire(bizId, n = 1) {
       const biz = this.biz(bizId); if (!biz) return { ok: false };
+      n = Math.max(0, Math.floor(n)); if (!n) return { ok: false };
       biz.staff += n;
+      biz.trainees = biz.trainees || [];
+      biz.trainees.push({ n, days: ECONOMY.traineeDays });
       this.S.stats.maxStaff = Math.max(this.S.stats.maxStaff, this.totalStaff());
       return { ok: true };
     }
@@ -448,7 +583,13 @@
       if (n <= 0) return { ok: false, msg: 'No staff to let go.' };
       const severance = n * this.dailyWage(biz) * 2;
       biz.staff -= n; S.cash -= severance;
+      this._dropTrainees(biz, n);
       return { ok: true, severance };
+    }
+    _dropTrainees(biz, n) { // trainees leave first
+      let left = n; const keep = [];
+      for (const t of (biz.trainees || [])) { if (left >= t.n) { left -= t.n; continue; } if (left > 0) { t.n -= left; left = 0; } keep.push(t); }
+      biz.trainees = keep;
     }
     setWage(bizId, mult) { const b = this.biz(bizId); if (b) b.wageMult = clamp(Math.round(mult * 10) / 10, 0.6, 1.6); }
     setMarketing(bizId, amount) { const b = this.biz(bizId); if (b) b.marketing = Math.max(0, Math.round(amount)); }
@@ -526,13 +667,26 @@
       if (amount < 100) return { ok: false, msg: 'Minimum loan is $100.' };
       if (S.loans.length >= MAX_LOANS) return { ok: false, msg: `You can hold at most ${MAX_LOANS} loans.` };
       if (amount > this.availableCredit()) return { ok: false, msg: 'Exceeds your credit limit.' };
+      if (S.marginDays >= ECONOMY.marginCallDays) return { ok: false, msg: 'The bank will not lend while your debt exceeds your credit line.' };
       const rate = this.currentRate();
-      S.loans.push({ id: S.nextLoanId++, amount, principal: amount, rate, day: S.day, paidInterest: 0 });
+      S.loans.push({ id: S.nextLoanId++, amount, principal: amount, rate, day: S.day, due: S.day + ECONOMY.loanTerm, paidInterest: 0 });
       S.cash += amount; S.stats.loansTaken++;
-      this.log('🏦', `Borrowed ${this.fmt(amount)} at ${(rate * 100).toFixed(2)}%/day.`, 'neutral');
+      this.log('🏦', `Borrowed ${this.fmt(amount)} at ${(rate * 100).toFixed(2)}%/day, due in ${ECONOMY.loanTerm} days.`, 'neutral');
       this.emit('loan', { amount });
       this._checkAchievements();
       return { ok: true };
+    }
+    // Roll a loan into a fresh 90-day term at today's rate, for a 1% fee.
+    refinanceLoan(loanId) {
+      const S = this.S, loan = S.loans.find(l => l.id === loanId);
+      if (!loan) return { ok: false };
+      if (S.marginDays >= ECONOMY.marginCallDays) return { ok: false, msg: 'Not while the bank is calling your debt.' };
+      const fee = Math.round(loan.amount * 0.01);
+      if (S.cash < fee) return { ok: false, msg: `Needs ${this.fmt(fee)} in cash for the fee.` };
+      S.cash -= fee; S.lastDay.other -= fee;
+      loan.rate = this.currentRate(); loan.day = S.day; loan.due = S.day + ECONOMY.loanTerm;
+      this.log('🏦', `Refinanced a ${this.fmt(loan.amount)} loan for ${this.fmt(fee)}. New due date in ${ECONOMY.loanTerm} days.`, 'neutral');
+      return { ok: true, fee };
     }
     repayLoan(loanId, amount) {
       const S = this.S;
@@ -545,14 +699,14 @@
       this._checkAchievements();
       return { ok: true };
     }
-    buyShares(compId, dollars) {
+    buyShares(compId, dollars, discount = 0) {
       const S = this.S, c = this._comp(compId);
-      if (!c || c.acquired) return { ok: false };
+      if (!c || c.acquired || c.bust) return { ok: false, msg: 'That stock is not trading.' };
+      if (S.cash <= 0) return { ok: false, msg: 'Not enough cash.' };
       dollars = Math.min(Math.floor(dollars), Math.floor(S.cash));
       if (dollars < 10) return { ok: false, msg: 'Not enough cash.' };
-      const price = c.value / D.SHARES;
-      const fee = dollars * 0.005;
-      const shares = (dollars - fee) / price;
+      const price = this.sharePrice(compId, 'buy') * (1 - discount);
+      const shares = dollars / price;
       const pos = S.portfolio[compId] || (S.portfolio[compId] = { shares: 0, cost: 0 });
       pos.shares += shares; pos.cost += dollars;
       S.cash -= dollars;
@@ -562,32 +716,143 @@
       const S = this.S, c = this._comp(compId), pos = S.portfolio[compId];
       if (!c || !pos || pos.shares <= 0) return { ok: false };
       shares = Math.min(shares, pos.shares);
-      const price = c.value / D.SHARES;
-      const gross = shares * price, fee = gross * 0.005;
+      const price = c.bust ? 0 : this.sharePrice(compId, 'sell');
+      const gross = shares * price;
       const costPart = pos.cost * (shares / pos.shares);
-      const profit = gross - fee - costPart;
+      const profit = gross - costPart;
       pos.shares -= shares; pos.cost -= costPart;
       if (pos.shares < 1e-6) delete S.portfolio[compId];
-      S.cash += gross - fee;
+      S.cash += gross;
       S.stats.tradingProfit += profit;
       this._checkAchievements();
-      return { ok: true, proceeds: gross - fee, profit };
+      return { ok: true, proceeds: gross, profit };
     }
     acquireCompetitor(compId) {
       const S = this.S, c = this._comp(compId), def = this.compDef(compId);
       if (!this.canAcquire(compId)) return { ok: false, msg: 'You cannot afford this acquisition yet.' };
       const price = this.acquisitionPrice(compId);
-      // cash out any shares first at the acquisition premium
+      // cash out any shares first at the mid price
       if (S.portfolio[compId]) this.sellShares(compId, S.portfolio[compId].shares);
       S.cash -= price;
-      c.acquired = true;
-      S.subsidiaries.push({ id: compId, name: def.name, icon: def.icon, value: c.value, income: c.value * 0.004 });
+      c.acquired = true; c.priceWar = 0;
+      S.subsidiaries.push({ id: compId, name: def.name, icon: def.icon, value: c.value, income: 0, health: 1, integration: ECONOMY.integrationDays });
       S.stats.acquisitions++;
-      this.log('🤝', `${S.company} acquires ${def.name} for ${this.fmt(price)}!`, 'good');
+      this.log('🤝', `${S.company} acquires ${def.name} for ${this.fmt(price)}. Integration will cost money for ${ECONOMY.integrationDays} days.`, 'good');
       this.emit('acquired', { name: def.name, icon: def.icon, price });
       this._checkAchievements();
       return { ok: true };
     }
+    // Subsidiaries decay unless you put money back in.
+    investSubsidiary(compId) {
+      const S = this.S, sub = S.subsidiaries.find(s => s.id === compId);
+      if (!sub) return { ok: false };
+      const cost = this.subInvestCost(sub);
+      if (S.cash < cost) return { ok: false, msg: 'Not enough cash.' };
+      S.cash -= cost; S.lastDay.other -= cost;
+      sub.health = 1; sub.value *= 1.03;
+      this.log('🔧', `Reinvested ${this.fmt(cost)} in ${sub.name}. It is back at full strength.`, 'good');
+      return { ok: true, cost };
+    }
+
+    // ---------- timed offers -----------------------------------------------------------
+    offerFee(o) { return o.fee; }
+    _spawnOffer(force = false) {
+      const S = this.S;
+      if (!force && S.offers.length >= ECONOMY.maxOffers) return null;
+      if (force && S.offers.length >= ECONOMY.maxOffers) S.offers.shift();
+      const eligible = OFFER_TEMPLATES.filter(t => (t.minDay || 0) <= S.day && !S.offers.some(o => o.tid === t.id));
+      if (!eligible.length) return null;
+      const t = weightedPick(eligible, x => x.w);
+      const o = { id: S.nextOfferId++, tid: t.id, icon: t.icon, title: t.title, created: S.day, expires: S.day + t.days, data: {} };
+      const bizList = S.businesses;
+      switch (t.id) {
+        case 'distressed': {
+          const types = TYPE_ORDER.filter(x => S.unlocked[x]);
+          const type = types[Math.min(types.length - 1, Math.max(0, types.length - 1 - Math.floor(rand() * 2)))];
+          o.data.type = type; o.fee = Math.round(this.bizCost(type) * rnd(0.45, 0.62));
+          o.desc = t.desc.replace('{type}', BUSINESS_TYPES[type].name).replace('{fee}', this.fmt(o.fee));
+          break;
+        }
+        case 'bulk_lot': {
+          if (!bizList.length) return null;
+          const b = pick(bizList), pid = pick(BUSINESS_TYPES[b.type].products);
+          const exp = Math.max(1, this.expectedDemand(b, pid));
+          const qty = Math.max(2, Math.ceil(exp * rnd(6, 12)));
+          const unit = this.buyCost(pid, b) * 0.6;
+          o.data.bizId = b.id; o.data.pid = pid; o.data.qty = qty; o.data.unit = unit; o.fee = Math.round(qty * unit);
+          o.desc = t.desc.replace('{qty}', qty.toLocaleString()).replace('{product}', PRODUCTS[pid].name).replace('{fee}', this.fmt(o.fee)).replace('{biz}', b.name);
+          break;
+        }
+        case 'block_trade': {
+          const alive = COMPETITORS.filter((d, i) => !S.competitors[i].acquired && !S.competitors[i].bust);
+          if (!alive.length) return null;
+          const def = pick(alive); o.data.rival = def.id; o.fee = Math.round(Math.max(500, S.valuation * 0.05));
+          o.desc = t.desc.replace('{rival}', def.name).replace('{fee}', this.fmt(o.fee));
+          break;
+        }
+        case 'star_manager': {
+          const cands = bizList.filter(b => !b.manager);
+          if (!cands.length) return null;
+          const b = pick(cands); o.data.bizId = b.id; o.fee = Math.round(Math.max(400, b.paid * 0.25));
+          o.desc = t.desc.replace('{biz}', b.name).replace('{fee}', this.fmt(o.fee));
+          break;
+        }
+      }
+      S.offers.push(o);
+      this.log(o.icon, `${o.title}: ${o.desc} (${t.days} days)`, 'neutral');
+      this.emit('offer', { offer: o });
+      return o;
+    }
+    acceptOffer(id) {
+      const S = this.S, o = S.offers.find(x => x.id === id);
+      if (!o) return { ok: false, msg: 'That offer is gone.' };
+      if (S.cash < o.fee) return { ok: false, msg: `Needs ${this.fmt(o.fee)} in cash.` };
+      let msg = '';
+      switch (o.tid) {
+        case 'distressed': {
+          const T = BUSINESS_TYPES[o.data.type];
+          S.cash -= o.fee;
+          const biz = this._makeBusiness(o.data.type, o.fee);
+          biz.rep = 30; biz.autoRestock = true;
+          S.businesses.push(biz); S.stats.bizBought++;
+          msg = `Bought a distressed ${T.name} for ${this.fmt(o.fee)}. Restock it and rebuild its reputation.`;
+          this.emit('bizBought', { biz });
+          break;
+        }
+        case 'bulk_lot': {
+          const b = this.biz(o.data.bizId); if (!b) return { ok: false, msg: 'That business no longer exists.' };
+          const cap = this.capacity(b, o.data.pid) - b.stock[o.data.pid];
+          const qty = Math.min(o.data.qty, Math.max(0, cap));
+          if (qty <= 0) return { ok: false, msg: 'No room in storage for the lot.' };
+          const cost = Math.round(qty * o.data.unit);
+          S.cash -= cost;
+          const prev = b.stock[o.data.pid];
+          b.avgCost[o.data.pid] = (prev * b.avgCost[o.data.pid] + qty * o.data.unit) / (prev + qty);
+          b.stock[o.data.pid] += qty;
+          msg = `${qty.toLocaleString()} units of ${PRODUCTS[o.data.pid].name} delivered to ${b.name} for ${this.fmt(cost)}${qty < o.data.qty ? ' (storage limited the lot)' : ''}.`;
+          break;
+        }
+        case 'block_trade': {
+          const r = this.buyShares(o.data.rival, o.fee, 0.25);
+          if (!r.ok) return r;
+          msg = `Bought ${this.compDef(o.data.rival).name} shares at a 25% discount.`;
+          break;
+        }
+        case 'star_manager': {
+          const b = this.biz(o.data.bizId); if (!b) return { ok: false, msg: 'That business no longer exists.' };
+          S.cash -= o.fee; b.manager = true;
+          msg = `A star manager now runs ${b.name}.`;
+          break;
+        }
+      }
+      S.offers = S.offers.filter(x => x.id !== id);
+      S.stats.offersTaken++;
+      this.log(o.icon, msg, 'good');
+      this.emit('offerTaken', { offer: o, msg });
+      this._checkAchievements();
+      return { ok: true, msg };
+    }
+    declineOffer(id) { this.S.offers = this.S.offers.filter(x => x.id !== id); return { ok: true }; }
     resolveChoice(index) {
       const S = this.S, pend = S.events.pending;
       if (!pend) return { ok: false };
@@ -603,8 +868,14 @@
         if (ins.repDelta && bizObj) bizObj.rep = clamp(bizObj.rep + ins.repDelta, 0, 100);
         if (ins.repDeltaAll) for (const b of S.businesses) b.rep = clamp(b.rep + ins.repDeltaAll, 0, 100);
         if (ins.inventoryLossPctProduct && bizObj && param.product) bizObj.stock[param.product] = Math.floor(bizObj.stock[param.product] * (1 - ins.inventoryLossPctProduct));
+        if (ins.sellOut) {
+          S.cash += param.fee; S.flags.soldOut = true; S.flags.won = true;
+          this.log('🦈', `${S.company} was sold to ${param.rivalName} for ${this.fmt(param.fee)}.`, 'neutral');
+          this.emit('soldOut', { fee: param.fee, rival: param.rivalName });
+        }
       }
       if (choice.fx) S.events.active.push({ id: def.id, title: def.title, icon: def.icon, kind: 'choice', days: choice.dur || 10, fx: choice.fx, param });
+      if (def.id === 'hostile_bid' && !choice.instant) S.raid = { rival: param.rivalName, days: choice.dur || 30, startValue: S.valuation };
       const msg = this._fill(choice.msg, param);
       this.log(def.icon, msg, 'neutral');
       this.emit('choiceResolved', { msg, icon: def.icon });
@@ -614,15 +885,17 @@
     // ---------- the daily tick ---------------------------------------------------------
     tick() {
       const S = this.S;
-      if (S.flags.bankrupt) return;
+      if (S.flags.bankrupt || S.flags.sprintDone) return;
       if (S.events.pending) { // waiting for the player's decision
         if (EVENTS.find(e => e.id === S.events.pending.id)) return;
         S.events.pending = null; // unknown event from an older build: drop it
       }
+      rngState = S.seed != null ? S.rngState : null;
       S.day++;
+      if (this.yearDay() === 1) { S.year.startValue = S.valuation; S.year.startProfit = S.stats.totalProfit; }
       const fx = this._fx = this.activeEffects();
       const day = { revenue: 0, cogs: 0, wages: 0, rent: 0, marketing: 0, overhead: 0, upkeep: 0, hqUpkeep: 0, interest: 0, tax: 0,
-        other: 0, pretax: 0, profit: 0, units: 0, subsidiaries: 0, spoilage: 0, fees: 0 };
+        other: 0, pretax: 0, profit: 0, units: 0, subsidiaries: 0, spoilage: 0, fees: 0, levy: 0 };
 
       // 1. auto pricing & auto restock
       for (const biz of S.businesses) {
@@ -634,7 +907,59 @@
       // 3. company finances
       for (const loan of S.loans) { const i = loan.amount * loan.rate * fx.rate; day.interest += i; loan.paidInterest += i; }
       S.cash -= day.interest;
-      for (const sub of S.subsidiaries) { day.subsidiaries += sub.income; sub.value *= 1.001; sub.income = sub.value * 0.004; }
+      // Loans are interest-only for their term, then the bank collects the principal in
+      // equal daily instalments over the next month. Refinance before the term to reset it.
+      for (const loan of [...S.loans]) {
+        if (loan.due == null) loan.due = loan.day + ECONOMY.loanTerm;
+        if (S.day === loan.due - 10) this.emit('loanDueSoon', { loan, days: 10 });
+        if (S.day >= loan.due) {
+          if (S.day === loan.due) { loan.instalment = loan.amount / ECONOMY.loanAmortDays; this.log('🏦', `Loan of ${this.fmt(loan.amount)} reached its term. The bank now collects ${this.fmt(loan.instalment)} a day for ${ECONOMY.loanAmortDays} days.`, 'neutral'); this.emit('loanDue', { loan }); }
+          const pay = Math.min(loan.amount, loan.instalment || loan.amount / ECONOMY.loanAmortDays);
+          loan.amount -= pay; S.cash -= pay; S.stats.loansRepaid += pay; day.repaid = (day.repaid || 0) + pay;
+          if (loan.amount <= 0.5) { S.loans = S.loans.filter(l => l.id !== loan.id); this.log('🏦', 'A loan was fully repaid.', 'good'); }
+        }
+      }
+      // Margin call: debt well above the credit line for three days gets called in. The
+      // bank only takes cash you actually have; while you stay in breach it charges a
+      // penalty rate and lends nothing, and after 30 days in breach it sells a business.
+      const limit = this.creditLimit(fx), debt = this.totalDebt();
+      if (debt > limit * ECONOMY.marginHeadroom && debt > 0 && S.day > 60) {
+        S.marginDays++;
+        if (S.marginDays === 1) this.emit('marginWarning', { excess: debt - limit, days: ECONOMY.marginCallDays });
+        if (S.marginDays === ECONOMY.marginCallDays && S.perks && S.perks.shield && !S.waived.margin) {
+          S.waived.margin = true; S.marginDays = -30; // a month of grace
+          this.log('🛡️', 'Crisis Playbook: the bank waived its margin call and gave you 30 days.', 'good');
+        } else if (S.marginDays >= ECONOMY.marginCallDays) {
+          const penalty = debt * ECONOMY.marginPenalty; S.cash -= penalty; day.interest += penalty;
+          const floor = this._dailyFixedCosts(fx) * ECONOMY.marginCashFloor;
+          let excess = Math.min(debt - limit, Math.max(0, S.cash - floor));
+          let called = 0;
+          for (const loan of [...S.loans]) { if (excess <= 0) break; const pay = Math.min(loan.amount, excess); loan.amount -= pay; excess -= pay; called += pay; S.cash -= pay; S.stats.loansRepaid += pay; if (loan.amount <= 0.5) S.loans = S.loans.filter(l => l.id !== loan.id); }
+          if (S.marginDays === ECONOMY.marginCallDays) {
+            S.stats.marginCalls++;
+            S.sentiment = Math.max(ECONOMY.sentimentMin, S.sentiment - 0.05);
+            this.log('🚨', `Margin call: the bank took ${this.fmt(called)} of cash against your debt and is charging a penalty rate until you are back inside your credit line.`, 'bad');
+            this.emit('marginCall', { amount: called, penalty });
+          }
+          if (S.marginDays >= ECONOMY.marginCallDays + 30 && S.businesses.length > 1) {
+            const weakest = [...S.businesses].sort((a, b) => this.bizProfitEstimate(a) - this.bizProfitEstimate(b))[0];
+            const value = this.bizSaleValue(weakest);
+            S.businesses = S.businesses.filter(b => b.id !== weakest.id); S.cash += value;
+            let left = value; for (const loan of [...S.loans]) { if (left <= 0) break; const pay = Math.min(loan.amount, left); loan.amount -= pay; left -= pay; S.cash -= pay; S.stats.loansRepaid += pay; if (loan.amount <= 0.5) S.loans = S.loans.filter(l => l.id !== loan.id); }
+            S.marginDays = ECONOMY.marginCallDays;
+            this.log('🏷️', `The bank forced the sale of ${weakest.name} for ${this.fmt(value)} to cover your debt.`, 'bad');
+            this.emit('forcedSale', { biz: weakest, value });
+          }
+        }
+      } else if (S.marginDays > 0) { if (S.marginDays >= ECONOMY.marginCallDays) this.log('🏦', 'You are back inside your credit line. Penalty rate lifted.', 'good'); S.marginDays = 0; }
+      else if (S.marginDays < 0) S.marginDays++;
+      // Subsidiaries: pay to integrate, then earn according to health, which decays.
+      for (const sub of S.subsidiaries) {
+        if (sub.health == null) { sub.health = 1; sub.integration = 0; }
+        if (sub.integration > 0) { sub.integration--; sub.income = -sub.value * ECONOMY.integrationCost; if (sub.integration === 0) this.log(sub.icon, `${sub.name} is fully integrated and now pays its way.`, 'good'); }
+        else { sub.health = Math.max(0.15, sub.health - ECONOMY.subDecay); sub.income = sub.value * ECONOMY.subIncome * sub.health; sub.value *= 1 + 0.0006 * sub.health; }
+        day.subsidiaries += sub.income;
+      }
       S.cash += day.subsidiaries;
       day.hqUpkeep = this.hqUpkeep();
       S.cash -= day.hqUpkeep;
@@ -668,7 +993,26 @@
       // 7. valuation & history
       S.ema7 = S.ema7 === 0 && S.day === 1 ? day.profit : S.ema7 + (day.profit - S.ema7) * (2 / 8);
       S.ema30 = S.ema30 === 0 && S.day === 1 ? day.profit : S.ema30 + (day.profit - S.ema30) * (2 / 31);
+      // A broken profit streak spooks investors.
+      if (day.profit > 0) { S.streak++; S.stats.bestStreak = Math.max(S.stats.bestStreak, S.streak); }
+      else { if (S.streak >= 10) { S.sentiment = Math.max(ECONOMY.sentimentMin, S.sentiment - ECONOMY.streakBreak); this.emit('streakBroken', { streak: S.streak }); } S.streak = 0; }
       this._computeValuation();
+      // Year-end levy: a lump sum on company value, due on the last day of the year.
+      if (this.yearDay() === DAYS_PER_YEAR && S.day > 1) {
+        const levy = this.levyDue();
+        if (levy > 0) {
+          const before = S.cash;
+          S.cash -= levy; day.levy = levy; day.other -= levy; S.stats.levyTotal += levy;
+          if (before >= levy) S.stats.leviesPaid++;
+          this.log('🧾', `Year-end levy of ${this.fmt(levy)} paid${S.cash < 0 ? ' — it pushed you into overdraft' : ''}.`, S.cash < 0 ? 'bad' : 'neutral');
+        }
+        const y = Math.floor((S.day - 1) / DAYS_PER_YEAR) + 1;
+        const report = { year: y, startValue: S.year.startValue, endValue: S.valuation, profit: S.stats.totalProfit - S.year.startProfit, levy, businesses: S.businesses.length };
+        const g = report.startValue > 0 ? report.endValue / report.startValue : 1;
+        report.grade = g >= 8 ? 'A+' : g >= 4 ? 'A' : g >= 2.5 ? 'B' : g >= 1.5 ? 'C' : g >= 1 ? 'D' : 'F';
+        this.log('📅', `Year ${y} report: value ${this.fmt(report.startValue)} → ${this.fmt(report.endValue)}. Grade ${report.grade}.`, 'neutral');
+        this.emit('annualReport', report);
+      } else if (this.daysToLevy() === 15 && S.day > 30) this.emit('levySoon', { amount: this.levyDue(), days: 15 });
       // overdraft handling
       if (S.cash < 0) {
         S.overdraftDays++;
@@ -677,13 +1021,25 @@
         if (S.overdraftDays === 1) this.emit('overdraft', { days: OVERDRAFT_LIMIT_DAYS });
         else if (S.overdraftDays === OVERDRAFT_LIMIT_DAYS - 3) this.emit('overdraftWarning', { left: 3 });
       } else S.overdraftDays = 0;
+      // Near miss: living on under two days of cash, then pulling out of it.
+      const rw = this.runway();
+      if (S.cash > 0 && rw < 2) S.lowRunwayDays++;
+      else if (S.lowRunwayDays >= 3 && rw >= 5) {
+        const bonus = Math.round(Math.max(500, S.valuation * ECONOMY.closeCallBonus));
+        const lowDays = S.lowRunwayDays;
+        S.cash += bonus; day.other += bonus; S.stats.closeCalls++; S.lowRunwayDays = 0;
+        this.log('😅', `Close call! You clawed back from ${lowDays} days on fumes. Investors reward the nerve: +${this.fmt(bonus)}.`, 'good');
+        this.emit('closeCall', { bonus });
+      } else if (rw >= 5) S.lowRunwayDays = 0;
       S.lastDay = day;
       S.stats.totalRevenue += day.revenue; S.stats.totalProfit += day.profit; S.stats.unitsSold += day.units;
       S.stats.peakValue = Math.max(S.stats.peakValue, S.valuation);
-      if (day.profit > 0) { S.streak++; S.stats.bestStreak = Math.max(S.stats.bestStreak, S.streak); } else S.streak = 0;
+      S.stats.bestDayProfit = Math.max(S.stats.bestDayProfit || 0, day.profit);
+      for (const m of [1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10]) if (!S.stats.milestones[m] && S.valuation >= m) S.stats.milestones[m] = S.day;
       this._updateRank();
       this._pushHistory();
       // 8. progression systems
+      this._tickOffers();
       this._checkUnlocks();
       this._tickQuests();
       this._checkAchievements();
@@ -694,14 +1050,28 @@
         this.log('💀', `${S.company} has gone bankrupt.`, 'bad');
         this.emit('bankrupt', {});
       }
-      if (!S.flags.won && S.valuation >= D.WIN_VALUE) {
+      if (S.challenge && S.day >= DAILY.days && !S.flags.sprintDone) {
+        S.flags.sprintDone = true;
+        this.log('⏱️', `${DAILY.name} over: ${S.company} is worth ${this.fmt(S.valuation)}.`, 'good');
+        this.emit('sprintDone', { valuation: S.valuation });
+      }
+      if (!S.flags.won && !S.challenge && S.valuation >= S.winValue) {
         S.flags.won = true;
-        this.log('🏆', `${S.company} is worth $1 BILLION!`, 'good');
+        this.log('🏆', `${S.company} is worth ${this.fmt(S.winValue)}!`, 'good');
         this.emit('win', {});
       }
       this.emit('day', { day: S.day, summary: day });
       this._fx = null;
+      if (S.seed != null) S.rngState = rngState;
+      rngState = null;
       return day;
+    }
+    _tickOffers() {
+      const S = this.S;
+      const keep = [];
+      for (const o of S.offers) { if (S.day >= o.expires) { this.log(o.icon, `${o.title} expired.`, 'neutral'); this.emit('offerExpired', { offer: o }); } else keep.push(o); }
+      S.offers = keep;
+      if (S.day >= 10 && rand() < ECONOMY.offerChance) this._spawnOffer();
     }
 
     _autoRestock(biz, fx) {
@@ -711,14 +1081,24 @@
         const expected = Math.max(biz.last.expected[pid] || 0, this.expectedDemand(biz, pid, biz.prices[pid], fx));
         const target = Math.min(this.capacity(biz, pid), Math.ceil(expected * biz.stockDays * 1.1));
         const need = target - biz.stock[pid];
-        if (need > 0 && S.cash > 0) {
-          // never spend the last of the cash on auto-restock: keep a reserve of one day of wages & rent company-wide
-          const reserve = this._dailyFixedCosts(fx);
-          const spendable = S.cash - reserve;
-          const unit = this.buyCost(pid, biz);
-          const qty = Math.min(need, Math.floor(spendable / unit));
-          if (qty > 0) this.buyInventory(biz.id, pid, qty, true);
+        if (need <= 0) continue;
+        // never spend the last of the cash on auto-restock: keep a reserve of one day of wages & rent company-wide
+        const reserve = this._dailyFixedCosts(fx);
+        const unit = this.buyCost(pid, biz);
+        let spendable = S.cash - reserve;
+        // Supplier credit: when cash is short but the credit line is open, the bank fronts
+        // the stock as a loan. Empty shelves kill companies; interest merely hurts.
+        if (spendable < need * unit && biz.supplierCredit !== false) {
+          const short = Math.min(need * unit - Math.max(0, spendable), this.availableCredit());
+          if (short >= 100 && S.loans.length < MAX_LOANS && S.marginDays < ECONOMY.marginCallDays) {
+            const existing = S.loans.find(l => l.supplier && l.day === S.day);
+            if (existing) { existing.amount += short; existing.principal += short; S.cash += short; }
+            else { S.loans.push({ id: S.nextLoanId++, amount: short, principal: short, rate: this.currentRate(), day: S.day, due: S.day + ECONOMY.loanTerm, paidInterest: 0, supplier: true }); S.cash += short; S.stats.loansTaken++; if (!S.supplierNoted) { S.supplierNoted = true; this.log('🏦', 'Cash ran short, so the bank fronted stock on supplier credit. It is a loan like any other.', 'neutral'); } }
+            spendable = S.cash - reserve;
+          }
         }
+        const qty = Math.min(need, Math.floor(spendable / unit));
+        if (qty > 0) this.buyInventory(biz.id, pid, qty, true);
       }
     }
     _dailyFixedCosts(fx) {
@@ -772,14 +1152,24 @@
       last.wages = biz.staff * this.dailyWage(biz, fx);
       last.pretax = last.revenue - last.cogs - last.wages - last.rent - last.marketing - last.spoiled - last.overhead - last.upkeep;
       last.profit = last.pretax;   // tax is allocated once the company total is known
-      // reputation dynamics
+      // staff: trainees graduate, and underpaid people quit
+      biz.trainees = (biz.trainees || []).filter(t => --t.days > 0 && t.n > 0);
+      if (biz.staff > 0) {
+        const quit = stochRound(biz.staff * this.quitRate(biz));
+        if (quit > 0) { biz.staff -= quit; this._dropTrainees(biz, quit); S.stats.staffQuit += quit; last.quit = quit; if (quit >= Math.max(2, biz.staff * 0.2)) this.emit('staffQuit', { biz, n: quit }); }
+      }
+      // reputation: drifts back toward 50 and has to be earned above it
       const stockoutFrac = unitsWanted > 0 ? last.lostStock / unitsWanted : 0;
       const staffFrac = 1 - service;
       const avgRatio = ratioSum / T.products.length;
-      let delta = (biz.rep < 70 ? 0.5 : 0.15) - 3 * stockoutFrac - 3 * staffFrac;
-      if (avgRatio > 1.4) delta -= (avgRatio - 1.4) * 2;
-      if (avgRatio < 0.9) delta += 0.3;
+      let delta = biz.rep < 50 ? 0.25 : -0.1 * (biz.rep - 50) / 50 - 0.04;
+      if (stockoutFrac < 0.06 && service >= 0.92 && avgRatio <= ECONOMY.repGougeAt) delta += 0.4;
+      if (avgRatio < 0.95) delta += 0.15;
+      delta -= 3 * stockoutFrac + 3 * staffFrac;
+      if (avgRatio > ECONOMY.repGougeAt) delta -= (avgRatio - ECONOMY.repGougeAt) * 2.5;
       if (biz.staff === 0) delta -= 0.5;
+      if (this.priceWarIn(biz.type)) delta -= 0.3;
+      if (biz.manager) delta += 0.1;
       biz.rep = clamp(biz.rep + delta, this.repFloor(biz), 100);
       // apply to company
       S.cash += last.revenue - last.wages - last.rent - last.marketing - last.overhead - last.upkeep;
@@ -821,6 +1211,7 @@
       if (Math.random() >= chance) return;
       const diff = DIFFICULTY[S.difficulty];
       const eligible = EVENTS.filter(e => {
+        if (e.special || !e.w) return false;
         if ((e.minDay || 0) > S.day) return false;
         if (S.events.active.some(a => a.id === e.id)) return false;
         if (e.needsMultiBiz && S.businesses.length < 2) return false;
@@ -833,7 +1224,7 @@
     }
     _fill(text, param) {
       if (!text) return '';
-      return text.replace('{product}', param.productName || '').replace('{biz}', param.bizName || '').replace('{cat}', param.catName || '').replace('{fee}', param.fee != null ? this.fmt(param.fee) : '');
+      return text.replace('{product}', param.productName || '').replace('{biz}', param.bizName || '').replace('{cat}', param.catName || '').replace('{rival}', param.rivalName || '').replace('{fee}', param.fee != null ? this.fmt(param.fee) : '');
     }
     _startEvent(def) {
       const S = this.S;
@@ -862,6 +1253,7 @@
         if (cashDelta) { S.cash += cashDelta; S.lastDay.other += cashDelta; param.cashDelta = cashDelta; }
         if (ins.repDelta && param.bizId) { const b = this.biz(param.bizId); b.rep = clamp(b.rep + ins.repDelta, 0, 100); }
         if (ins.inventoryLossPct && param.bizId) { const b = this.biz(param.bizId); for (const pid in b.stock) b.stock[pid] = Math.floor(b.stock[pid] * (1 - ins.inventoryLossPct * legal)); }
+        if (ins.staffLossPct && param.bizId) { const b = this.biz(param.bizId); const n = Math.floor(b.staff * ins.staffLossPct * legal); if (n > 0) { b.staff -= n; this._dropTrainees(b, n); S.stats.staffQuit += n; } }
         if (ins.competitorPct) for (const c of S.competitors) if (!c.acquired) c.value *= (1 + ins.competitorPct);
       }
       if (def.dur > 0) S.events.active.push({ id: def.id, title: def.title, icon: def.icon, kind: def.kind, days: def.dur, fx: def.fx || {}, param });
@@ -872,25 +1264,91 @@
     _updateCompetitors(fx) {
       const S = this.S;
       const diff = DIFFICULTY[S.difficulty];
+      const legacy = 1 + PRESTIGE.rivalPerLevel * (S.prestige || 0);
       const recession = S.events.active.some(e => e.id === 'recession');
       const boom = S.events.active.some(e => e.id === 'boom');
+      // what the player owns most of, for rivals to pile into
+      const counts = {}; for (const b of S.businesses) counts[b.type] = (counts[b.type] || 0) + 1;
+      const topType = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
       for (let i = 0; i < COMPETITORS.length; i++) {
         const def = COMPETITORS[i], c = S.competitors[i];
-        if (c.acquired) continue;
-        let r = def.growth * diff.rivalGrowth + def.vol * gauss() + (S.sentiment - 1) * 0.03;
-        if (recession) r -= 0.003;
+        if (c.acquired || c.bust) continue;
+        // regime: normal drift, slumps, and rare busts
+        if (c.slump > 0) c.slump--;
+        else if (rand() < ECONOMY.rivalSlumpChance) { c.slump = Math.floor(rnd(20, 60)); this.log(def.icon, `${def.name} is in trouble: profit warning, shares sliding.`, 'neutral'); this.emit('rivalSlump', { name: def.name, icon: def.icon }); }
+        let r = def.growth * ECONOMY.rivalDrift * diff.rivalGrowth * legacy + def.vol * gauss() + (S.sentiment - 1) * 0.03;
+        if (c.slump > 0) r -= ECONOMY.rivalSlumpDrag;
+        if (recession) r -= 0.004;
         if (boom) r += 0.002;
+        if (rand() < ECONOMY.rivalBustChance) {
+          const drop = rnd(0.3, 0.6); r -= drop;
+          const pos = S.portfolio[def.id];
+          if (c.value * (1 + r) < def.value * 0.15 && i < COMPETITORS.length - 1) {
+            c.bust = true; c.value = 1000; c.priceWar = 0;
+            if (pos) { S.stats.tradingProfit -= pos.cost; delete S.portfolio[def.id]; }
+            this.log('💀', `${def.name} has collapsed. ${pos ? 'Your shares are worthless.' : 'One less rival.'}`, pos ? 'bad' : 'good');
+            this.emit('rivalBust', { name: def.name, icon: def.icon, lost: pos ? pos.cost : 0 });
+            continue;
+          }
+          this.log('💥', `${def.name} shares crash ${Math.round(drop * 100)}% on a scandal.`, pos ? 'bad' : 'neutral');
+          this.emit('rivalCrash', { name: def.name, icon: def.icon, drop });
+        }
         c.value = Math.max(1000, c.value * (1 + r));
         c.history.push(c.value); if (c.history.length > 120) c.history.shift();
         c.strength = clamp(Math.log10(c.value) / 8, 0.3, 1.6);
-        if (c.value > S.valuation && Math.random() < 0.004) this.emit('taunt', { name: def.name, icon: def.icon, text: pick(def.taunts) });
+        // price wars: a rival in one of your sectors slashes prices for a while
+        if (c.priceWar > 0) {
+          c.priceWar--;
+          if (c.priceWar === 0) {
+            const won = S.ema7 > c.priceWarProfit;
+            if (won) S.stats.priceWarsWon++;
+            this.log('⚔️', `${def.name} ends its price war in ${BUSINESS_TYPES[c.priceWarType].name}s. ${won ? 'You held the line.' : 'It hurt.'}`, won ? 'good' : 'neutral');
+            this.emit('priceWarEnd', { name: def.name, icon: def.icon, type: c.priceWarType, won });
+            c.priceWarType = null; c.warCooldown = ECONOMY.priceWarCooldown;
+          }
+        } else if (c.warCooldown > 0) c.warCooldown--;
+        else if (S.day > 90 && S.businesses.length >= 3 && rand() < ECONOMY.priceWarChance * diff.badEvents) {
+          const mine = Object.keys(counts).filter(t => this.rivalInType(c, def, t));
+          if (mine.length && !this.priceWarIn(mine[0])) {
+            c.priceWarType = pick(mine); c.priceWar = Math.floor(rnd(12, 25)); c.priceWarProfit = S.ema7;
+            this.log('⚔️', `${def.name} starts a price war in ${BUSINESS_TYPES[c.priceWarType].name}s! Match fair prices or lose customers for ${c.priceWar} days.`, 'bad');
+            this.emit('priceWar', { name: def.name, icon: def.icon, type: c.priceWarType, days: c.priceWar });
+          }
+        }
+        // expansion into whatever you own most of
+        const nearTier = topType && def.types[0] !== '*' && def.types.some(t => Math.abs(BUSINESS_TYPES[t].tier - BUSINESS_TYPES[topType].tier) <= 2);
+        if (topType && nearTier && S.day > 120 && S.businesses.length >= 5 && !this.rivalInType(c, def, topType) && c.value > S.valuation * 0.3 && rand() < ECONOMY.rivalExpandChance * diff.rivalGrowth) {
+          c.extraTypes.push(topType);
+          this.log(def.icon, `${def.name} opens a ${BUSINESS_TYPES[topType].name} chain across town. Competition in that sector just got tougher.`, 'bad');
+          this.emit('rivalExpand', { name: def.name, icon: def.icon, type: topType });
+        }
+        if (c.value > S.valuation && rand() < 0.004) this.emit('taunt', { name: def.name, icon: def.icon, text: pick(def.taunts) });
+      }
+      // hostile takeover bid from a rival worth at least twice what you are
+      if (!S.events.pending && !S.raid && S.day >= 90 && S.businesses.length >= 3 && S.valuation > 50000 && rand() < ECONOMY.hostileBidChance) {
+        const big = COMPETITORS.map((d, i) => ({ d, c: S.competitors[i] })).filter(x => !x.c.acquired && !x.c.bust && x.c.value >= S.valuation * 2);
+        if (big.length) {
+          if (S.perks && S.perks.shield && !S.waived.hostile) { S.waived.hostile = true; this.log('🛡️', 'Crisis Playbook: your lawyers killed a hostile bid before it reached the board.', 'good'); }
+          else {
+            const x = pick(big), def = EVENTS.find(e => e.id === 'hostile_bid');
+            const param = { rival: x.d.id, rivalName: x.d.name, fee: Math.round(S.valuation * 1.3) };
+            const desc = def.desc.replace('{rival}', x.d.name).replace('{fee}', this.fmt(param.fee));
+            S.stats.eventsSeen++;
+            S.events.pending = { id: def.id, param, desc };
+            this.emit('choice', { def, param, desc });
+          }
+        }
+      }
+      if (S.raid) {
+        S.raid.days--;
+        if (S.raid.days <= 0) { if (S.cash > 0 && !S.flags.bankrupt) { S.stats.raidsSurvived++; this.log('🛡️', `You survived ${S.raid.rival}'s raid.`, 'good'); this.emit('raidSurvived', { rival: S.raid.rival }); } S.raid = null; }
       }
     }
     ranking() {
       const S = this.S;
       const rows = [{ id: "you", name: S.company, icon: "🏢", value: S.valuation, you: true }];
       for (let i = 0; i < COMPETITORS.length; i++) {
-        const c = S.competitors[i]; if (c.acquired) continue;
+        const c = S.competitors[i]; if (c.acquired || c.bust) continue;
         rows.push({ id: COMPETITORS[i].id, name: COMPETITORS[i].name, icon: COMPETITORS[i].icon, value: c.value, hist: c.history });
       }
       rows.sort((a, b) => b.value - a.value);
@@ -915,16 +1373,17 @@
       const S = this.S;
       const inv = this.totalInventoryValue();
       const bizAssets = S.businesses.reduce((a, b) => a + b.paid * 0.6 + b.upgradesPaid * 0.4, 0);
-      const subs = S.subsidiaries.reduce((a, s) => a + s.value, 0);
+      const subs = S.subsidiaries.reduce((a, s) => a + s.value * (s.health == null ? 1 : s.health), 0);
       const debt = this.totalDebt();
       const net = S.cash + inv + bizAssets + subs + this.portfolioValue() - debt;
-      // sentiment: mean-reverting random walk + event pressure
+      // sentiment: mean-reverting random walk + event pressure; panic can run deep
       const fx = this._fx || this.activeEffects();
-      S.sentiment = clamp(S.sentiment + (1 - S.sentiment) * 0.03 + gauss() * 0.012 + fx.sentiment * 0.05, 0.6, 1.5);
+      S.sentiment = clamp(S.sentiment + (1 - S.sentiment) * 0.03 + gauss() * 0.012 + fx.sentiment * 0.05, ECONOMY.sentimentMin, 1.5);
       S.jitter = clamp(S.jitter * 0.7 + gauss() * 0.008, -0.04, 0.04);
-      const growth = clamp((S.ema7 - S.ema30) / Math.max(Math.abs(S.ema30), 50), -0.5, 1.0);
-      const streakBonus = 1 + Math.min(0.1, S.streak / 300);
-      S.multiple = 95 * S.sentiment * (1 + 0.5 * growth) * (1 + this.hqEff('multiple')) * streakBonus;
+      const growth = clamp((S.ema7 - S.ema30) / Math.max(Math.abs(S.ema30), 50), -0.6, 0.6);
+      const streakBonus = 1 + Math.min(ECONOMY.streakMax, S.streak / ECONOMY.streakDays);
+      S.streakBonus = streakBonus;
+      S.multiple = ECONOMY.multiple * S.sentiment * (1 + 0.5 * growth) * (1 + this.hqEff('multiple')) * streakBonus;
       S.goodwill = Math.max(0, S.ema30) * S.multiple;
       S.netAssets = net;
       S.valuation = Math.max(0, (net + S.goodwill) * (1 + S.jitter));
@@ -1090,10 +1549,31 @@
           if (!Number.isFinite(b.marketing) || b.marketing < 0) b.marketing = 0;
           if (!Number.isFinite(b.stockDays)) b.stockDays = 4;
           if (!Number.isFinite(b.paid)) b.paid = 0; if (!Number.isFinite(b.upgradesPaid)) b.upgradesPaid = 0;
+          if (!Array.isArray(b.trainees)) b.trainees = [];
+          b.manager = !!b.manager;
         }
+        // rivals, subsidiaries, loans and offers gained fields in the second economy pass
+        for (const c of s.competitors) { if (!Array.isArray(c.extraTypes)) c.extraTypes = []; if (!Number.isFinite(c.slump)) c.slump = 0; if (!Number.isFinite(c.warCooldown)) c.warCooldown = 0; if (!Number.isFinite(c.priceWar)) c.priceWar = 0; if (c.priceWarType && !BUSINESS_TYPES[c.priceWarType]) { c.priceWarType = null; c.priceWar = 0; } c.bust = !!c.bust; }
+        s.subsidiaries = (s.subsidiaries || []).filter(x => x && Number.isFinite(x.value));
+        for (const sub of s.subsidiaries) { if (!Number.isFinite(sub.health)) sub.health = 1; if (!Number.isFinite(sub.integration)) sub.integration = 0; }
+        for (const l of (s.loans || [])) if (!Number.isFinite(l.due)) l.due = (l.day || s.day || 0) + ECONOMY.loanTerm;
+        if (!Array.isArray(s.offers)) s.offers = [];
+        s.offers = s.offers.filter(o => o && OFFER_TEMPLATES.find(t => t.id === o.tid));
+        if (!Number.isFinite(s.nextOfferId)) s.nextOfferId = 1;
+        if (!s.perks || typeof s.perks !== 'object') s.perks = { seed: 0, analytics: 0, credit: 0, launch: 0, shield: 0 };
+        if (!s.waived || typeof s.waived !== 'object') s.waived = { margin: false, hostile: false };
+        if (!Number.isFinite(s.prestige)) s.prestige = 0;
+        if (!Number.isFinite(s.winValue)) s.winValue = D.WIN_VALUE * Math.pow(PRESTIGE.targetGrowth, s.prestige);
+        if (!Number.isFinite(s.marginDays)) s.marginDays = 0;
+        if (!Number.isFinite(s.lowRunwayDays)) s.lowRunwayDays = 0;
+        if (s.seed != null && !Number.isFinite(s.seed)) s.seed = null;
+        if (s.seed == null) { s.seed = null; s.rngState = null; s.challenge = null; }
+        if (!s.year || typeof s.year !== 'object') s.year = { startValue: s.valuation || 0, startProfit: 0, levy: 0 };
+        if (s.raid && (!Number.isFinite(s.raid.days) || s.raid.days <= 0)) s.raid = null;
         const fresh = new Game(); fresh.newGame({ company: s.company, difficulty: s.difficulty in DIFFICULTY ? s.difficulty : 'normal' });
         const F = fresh.S;
         for (const k of ['stats', 'flags', 'lastDay', 'history', 'events']) { s[k] = s[k] || {}; for (const kk in F[k]) if (s[k][kk] == null) s[k][kk] = F[k][kk]; }
+        if (!s.stats.milestones || typeof s.stats.milestones !== 'object') s.stats.milestones = {};
         for (const k of ['quests', 'loans', 'subsidiaries', 'eventLog']) if (!Array.isArray(s[k])) s[k] = [];
         for (const k of ['achievements', 'unlocked', 'portfolio']) if (!s[k] || typeof s[k] !== 'object') s[k] = {};
         for (const k of ['sentiment', 'jitter', 'valuation', 'sharePrice', 'netAssets', 'goodwill', 'multiple', 'ema7', 'ema30', 'streak', 'overdraftDays', 'questCooldown', 'rank', 'nextBizId', 'nextLoanId', 'day', 'cash']) if (typeof s[k] !== 'number' || !isFinite(s[k])) s[k] = F[k];
@@ -1101,7 +1581,7 @@
         // Saves from before the tax/overhead/upkeep economy never budgeted for the new
         // daily bills. Hand over a restructuring grant so an old company is not killed
         // the moment it loads.
-        if (s.econ !== 2) {
+        if (s.econ !== 2 && s.econ !== 3) {
           s.econ = 2;
           this.S = s;
           let daily = this.hqUpkeep();
@@ -1112,6 +1592,14 @@
             s.eventLog.unshift({ day: s.day, icon: '🏛️', kind: 'good',
               text: `The economy has changed: corporate tax, head-office overhead and upgrade upkeep are now charged daily. A one-off restructuring grant of ${this.fmt(grant)} covers your first 45 days.` });
           }
+        }
+        if (s.econ === 2) {
+          // Third economy pass: loans now have terms, so give old loans a fresh 90 days
+          // from today, and hand over the first year-end levy as a warning rather than a bill.
+          s.econ = 3;
+          for (const l of s.loans) l.due = s.day + ECONOMY.loanTerm;
+          s.eventLog.unshift({ day: s.day, icon: '🏛️', kind: 'neutral',
+            text: 'The economy has changed again: loans now come due after 90 days, a year-end levy of 3% of company value is charged on day 360, reputation must be earned, staff can quit, rivals fight back, and the valuation multiple is lower. Your existing loans were reset to a fresh 90-day term.' });
         }
         if (s.events.pending && !EVENTS.find(e => e.id === s.events.pending.id)) s.events.pending = null;
         s.events.active = (s.events.active || []).filter(ev => ev && EVENTS.find(e => e.id === ev.id));
@@ -1136,10 +1624,13 @@
         if (S.events.pending) this.resolveChoice(1);
         this.tick();
         ran++;
-        if (S.cash < 0 || S.flags.bankrupt || S.flags.won) break;
+        if (S.cash < 0 || S.flags.bankrupt || S.flags.won || S.flags.sprintDone) break;
       }
+      // Something to decide on the moment you are back.
+      let offer = null;
+      if (ran >= 5 && !S.flags.bankrupt) { rngState = S.seed != null ? S.rngState : null; offer = this._spawnOffer(true); if (S.seed != null) S.rngState = rngState; rngState = null; }
       this.listeners = silent;
-      return { days: ran, cashDelta: S.cash - startCash, valueDelta: S.valuation - startVal, fromDay: startDay };
+      return { days: ran, cashDelta: S.cash - startCash, valueDelta: S.valuation - startVal, fromDay: startDay, offer };
     }
 
     // ---------- formatting -------------------------------------------------------------------

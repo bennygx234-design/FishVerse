@@ -10,7 +10,9 @@ Market Mayhem is a browser-based business simulation game written in plain HTML,
 2. Open `index.html` in any modern browser (Chrome, Edge, Firefox, Safari).
 3. Name your company, pick a difficulty, and start.
 
-Progress autosaves to your browser's local storage every 5 days and whenever you leave the page. Come back later and hit **Continue** — your managers even keep the shops running for up to 20 days while you're away.
+Progress autosaves to your browser's local storage every 5 days and whenever you leave the page. Come back later and hit **Continue** — your managers keep the shops running for up to 20 days while you're away, and there is always one deal waiting when you return.
+
+Win and you can **Go Public**: the run goes into your Legacy, you earn points for permanent perks, and the next run's target doubles. The **Daily Sprint** is a seeded 180-day run with the same markets for everyone that day — copy your score and compare.
 
 ## Deploy to Vercel
 
